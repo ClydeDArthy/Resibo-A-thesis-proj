@@ -1,0 +1,1 @@
+print("Hellaur, wag niyo pmuna to galawin 'till di pa naintegrate lahat); ")
