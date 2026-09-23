@@ -274,8 +274,7 @@ def set_theme(name):
     # Themes are baked into every item, so the interface is rebuilt.
     viewer.hide()
     folders.hide()
-    picker.hide_menu()
-    for tag in ("viewer", "folder_win", "theme_menu", "confirm_delete",
+    for tag in ("viewer", "folder_win", "confirm_delete",
                 "dlg_browse", "dlg_export", "dlg_evidence"):
         if dpg.does_item_exist(tag):
             dpg.delete_item(tag)
@@ -286,7 +285,6 @@ def set_theme(name):
     _confirm_dialog()
     viewer.build()
     folders.build()
-    picker.build_menu()
 
     dpg.push_container_stack("primary")
     _build_stages()
@@ -312,7 +310,6 @@ def run():
     _confirm_dialog()
     viewer.build()
     folders.build()
-    picker.build_menu()
     history.install_clock()
     progress.set_opener(_select)
 

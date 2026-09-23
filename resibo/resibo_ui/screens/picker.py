@@ -4,6 +4,8 @@ Cards are drawn, not themed, so they can grow and brighten under the cursor.
 `tick()` runs from the render loop and eases each card toward its hover state.
 """
 
+import math
+
 import dearpygui.dearpygui as dpg
 from .. import data, state, theme as th, widgets as w
 
@@ -11,6 +13,19 @@ CARD_W, CARD_H = 210, 230
 GAP = 22
 EASE = 0.22            # how quickly a card settles into its hover state
 GROW = 12              # extra pixels a card gains when hovered
+
+# Light/dark switch: a sliding knob that crossfades between a sun and a moon.
+SWITCH_W, SWITCH_H = 60, 28
+KNOB_R = 11
+PAD = 3
+LEFT_CX = PAD + KNOB_R
+RIGHT_CX = SWITCH_W - PAD - KNOB_R
+LIGHT_TRACK = (247, 197, 115)
+DARK_TRACK = (34, 40, 64)
+KNOB_COL = (252, 250, 246)
+SUN_COL = (255, 176, 44)
+MOON_COL = (222, 226, 238)
+SWITCH_EASE = 0.22
 
 # app.run() supplies these.
 _open_case = [None]
@@ -53,101 +68,86 @@ def build():
                 w.text("Select a case", "text", "h1", wrap=-1)
                 w.spacer(4)
                 w.mono("Click to select, double click to open.", "faint", small=True)
-            _settings()
+            _theme_toggle()
         w.spacer(22)
         with dpg.group(tag="pk_grid"):
             _fill()
     dpg.bind_item_theme(pane, th.T["pane"])
 
 
-def _settings():
-    """A gear that opens the theme menu."""
+_switch = {"pos": 0.0, "target": 0.0, "pending": None, "track": None}
+
+
+def _theme_toggle():
+    """A pill switch: sun for light, moon for dark, sliding between the two."""
     with dpg.group():
-        w.spacer(8)
-        with dpg.child_window(width=40, height=40, border=False,
+        w.spacer(10)
+        with dpg.child_window(width=SWITCH_W, height=SWITCH_H, border=False,
                               no_scrollbar=True, no_scroll_with_mouse=True) as cell:
-            gear = dpg.add_drawlist(width=40, height=40)
+            track = dpg.add_drawlist(width=SWITCH_W, height=SWITCH_H)
         dpg.bind_item_theme(cell, th.T["bare"])
-        _draw_gear(gear)
+        pos = 1.0 if th.CURRENT[0] == "Dark" else 0.0
+        _switch.update(pos=pos, target=pos, pending=None, track=track)
+        _draw_switch(track, pos)
+        state.on_click(cell, _toggle_switch)
+        with dpg.tooltip(cell):
+            w.text("Switch to " + ("light" if th.CURRENT[0] == "Dark" else "dark"),
+                  "text", "ui_sm", wrap=-1)
 
-        state.on_click(cell, _toggle_menu)
 
-
-def _draw_gear(target):
-    """A settings cog, drawn so it needs no icon font."""
-    import math
+def _draw_switch(target, pos):
+    """Redraw the switch at one point along its slide (0 = light, 1 = dark)."""
     dpg.delete_item(target, children_only=True)
     dpg.push_container_stack(target)
-    cx = cy = 20
-    col = th.TEXT_DIM
-    for i in range(8):                       # eight teeth around the rim
-        angle = math.pi * i / 4
-        dpg.draw_line((cx + math.cos(angle) * 9, cy + math.sin(angle) * 9),
-                      (cx + math.cos(angle) * 14, cy + math.sin(angle) * 14),
-                      color=col, thickness=3)
-    dpg.draw_circle((cx, cy), 9, color=col, thickness=2.4)
-    dpg.draw_circle((cx, cy), 3.4, color=col, thickness=2)
+    track_col = _mix(LIGHT_TRACK, DARK_TRACK, pos)
+    dpg.draw_rectangle((0, 0), (SWITCH_W, SWITCH_H), fill=track_col, color=th.BORDER,
+                       thickness=1, rounding=SWITCH_H / 2)
+
+    cx = LEFT_CX + (RIGHT_CX - LEFT_CX) * pos
+    cy = SWITCH_H / 2
+    dpg.draw_circle((cx, cy), KNOB_R, fill=KNOB_COL, color=(0, 0, 0, 0))
+
+    sun_a, moon_a = 1.0 - pos, pos
+    if sun_a > 0.02:
+        col = SUN_COL + (int(255 * sun_a),)
+        dpg.draw_circle((cx, cy), 4.4, fill=col, color=col)
+        for i in range(8):                   # eight short rays around the disc
+            angle = math.pi * i / 4
+            dpg.draw_line((cx + math.cos(angle) * 6.5, cy + math.sin(angle) * 6.5),
+                          (cx + math.cos(angle) * 9, cy + math.sin(angle) * 9),
+                          color=col, thickness=1.4)
+    if moon_a > 0.02:
+        col = MOON_COL + (int(255 * moon_a),)
+        cut = KNOB_COL + (int(255 * moon_a),)
+        dpg.draw_circle((cx, cy), 6.2, fill=col, color=col)
+        dpg.draw_circle((cx + 3.0, cy - 1.4), 5.2, fill=cut, color=cut)
     dpg.pop_container_stack()
 
 
-MENU_W, MENU_H = 200, 240
-_menu_open = [False]
-
-
-def build_menu():
-    """The theme menu, created once and shown beside the gear."""
-    with dpg.window(tag="theme_menu", show=False, no_title_bar=True, no_resize=True,
-                    no_move=True, no_collapse=True, no_scrollbar=True,
-                    no_scroll_with_mouse=True, width=MENU_W, height=MENU_H) as win:
-        w.text("Theme", "dim", "ui_sm", wrap=-1)
-        w.spacer(8)
-        for name in th.ORDER:
-            mark = ">  " if name == th.CURRENT[0] else "    "
-            row = dpg.add_button(label=mark + name, width=MENU_W - 32,
-                                 callback=_pick_theme, user_data=name)
-            w.font(row, "mono_sm")
-            dpg.bind_item_theme(row, th.T["pill_green"] if name == th.CURRENT[0]
-                                else th.T["btn_ghost"])
-            w.spacer(4)
-    dpg.bind_item_theme(win, th.T["panel"])
-
-
-def _toggle_menu(sender=None, app_data=None, user_data=None):
-    if _menu_open[0]:
-        hide_menu()
+def _toggle_switch(sender=None, app_data=None, user_data=None):
+    """Start the slide; the theme itself switches once it settles (see tick())."""
+    if _switch["pending"]:
         return
-    try:
-        width = dpg.get_viewport_client_width()
-    except Exception:
-        width = 1500
-    dpg.configure_item("theme_menu", show=True,
-                       pos=(max(10, width - MENU_W - 30), 208))
-    dpg.focus_item("theme_menu")     # keep it above the page behind it
-    _menu_open[0] = True
+    going_dark = _switch["target"] < 0.5
+    _switch["target"] = 1.0 if going_dark else 0.0
+    _switch["pending"] = "Dark" if going_dark else "Light"
 
 
-def hide_menu(sender=None, app_data=None, user_data=None):
-    if dpg.does_item_exist("theme_menu"):
-        dpg.configure_item("theme_menu", show=False)
-    _menu_open[0] = False
-
-
-def menu_open():
-    return _menu_open[0]
-
-
-def menu_click_outside(mouse_x, mouse_y):
-    """True if a click falls outside the open theme menu."""
-    if not _menu_open[0]:
-        return False
-    x, y = dpg.get_item_pos("theme_menu")
-    return not (x <= mouse_x <= x + MENU_W and y <= mouse_y <= y + MENU_H)
-
-
-def _pick_theme(sender, app_data, name):
-    hide_menu()
-    if _set_theme[0]:
-        _set_theme[0](name)
+def _tick_switch():
+    track = _switch["track"]
+    if track is None or not dpg.does_item_exist(track):
+        return
+    pos, target = _switch["pos"], _switch["target"]
+    moved = (target - pos) * SWITCH_EASE
+    pos = target if abs(moved) < 0.004 else pos + moved
+    if pos != _switch["pos"]:
+        _switch["pos"] = pos
+        _draw_switch(track, pos)
+    if pos == target and _switch["pending"]:
+        theme = _switch["pending"]
+        _switch["pending"] = None
+        if _set_theme[0]:
+            _set_theme[0](theme)
 
 
 def refresh():
@@ -269,7 +269,7 @@ def _mix(a, b, t):
 
 
 def tick():
-    """Ease every card toward its hover state. Called once per frame."""
+    """Ease every card and the theme switch toward their target. Called once per frame."""
     for entry in _cards:
         if not dpg.does_item_exist(entry["cell"]):
             continue
@@ -282,3 +282,4 @@ def tick():
             continue
         entry["hover"] += moved
         _draw(entry)
+    _tick_switch()

@@ -30,31 +30,9 @@ PALETTES = {
         "AMBER": (172, 116, 16), "BLUE": (28, 106, 200), "RED": (186, 52, 52),
         "ACCENT": (36, 170, 98),
     },
-    "Pink": {
-        "BG_APP": (26, 14, 22), "BG_RAIL": (32, 17, 27), "BG_PANEL": (36, 20, 31),
-        "BG_CARD": (46, 26, 39), "BG_CARD_HOVER": (58, 33, 49),
-        "BG_CARD_SEL": (62, 28, 50), "BG_ROW_SEL": (55, 26, 45),
-        "BORDER": (72, 42, 60), "BORDER_SEL": (196, 96, 150),
-        "TEXT": (244, 228, 238), "TEXT_DIM": (186, 142, 168),
-        "TEXT_FAINT": (140, 102, 124),
-        "GREEN": (246, 138, 190), "GREEN_DEEP": (168, 62, 118),
-        "AMBER": (232, 158, 96), "BLUE": (158, 150, 244), "RED": (236, 96, 120),
-        "ACCENT": (255, 176, 156),
-    },
-    "Dark blue": {
-        "BG_APP": (10, 16, 32), "BG_RAIL": (13, 20, 40), "BG_PANEL": (16, 24, 46),
-        "BG_CARD": (22, 33, 60), "BG_CARD_HOVER": (30, 44, 76),
-        "BG_CARD_SEL": (20, 44, 74), "BG_ROW_SEL": (22, 40, 68),
-        "BORDER": (38, 52, 84), "BORDER_SEL": (64, 128, 208),
-        "TEXT": (222, 232, 246), "TEXT_DIM": (134, 152, 186),
-        "TEXT_FAINT": (96, 114, 146),
-        "GREEN": (92, 200, 208), "GREEN_DEEP": (32, 108, 136),
-        "AMBER": (226, 168, 76), "BLUE": (104, 162, 255), "RED": (232, 104, 116),
-        "ACCENT": (104, 162, 255),
-    },
 }
 
-ORDER = ["Dark", "Light", "Pink", "Dark blue"]
+ORDER = ["Light", "Dark"]
 CURRENT = ["Dark"]
 
 # Names the rest of the app reads; set_palette() rewrites them.

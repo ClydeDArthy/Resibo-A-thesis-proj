@@ -254,8 +254,14 @@ def identity_for(person):
     return person
 
 
-def folder_meta(ident, frame, enhanced):
+def folder_meta(ident, kind, frame, enhanced):
     """Rows shown beside an image in the preview window."""
+    if kind == "gait":
+        return [("Identity", ident, "text"),
+                ("Frame", frame, "text"),
+                ("Kind", "annotated" if enhanced else "clean", "green" if enhanced else "dim"),
+                ("Source", "person box folder", "text"),
+                ("Model", "MediaPipe Pose" if enhanced else "YOLO11", "text")]
     return [("Identity", ident, "text"),
             ("Frame", frame, "text"),
             ("Kind", "enhanced" if enhanced else "raw", "green" if enhanced else "dim"),
@@ -322,34 +328,6 @@ MATCHED_IDENTITY = {"person 5": "Identity 2", "person 7": "Identity 6",
 def match_summary(person):
     """Face-score tiles for a person, or the below-threshold set."""
     return MATCH_SUMMARY.get(person, MATCH_SUMMARY["person 11"])
-
-GAIT_METRICS = {
-    "person 5": [("Walk cycles", "6", "complete", "text"),
-                 ("Cadence", "112", "steps per minute", "text"),
-                 ("Stance : swing", "61 : 39", "share of one cycle", "text"),
-                 ("Left vs right", "0.08", "apart", "green"),
-                 ("Signature", "sigma", "128 values - 6 cycles", "text")],
-    "person 7": [("Walk cycles", "4", "complete", "text"),
-                 ("Cadence", "108", "steps per minute", "text"),
-                 ("Stance : swing", "62 : 38", "share of one cycle", "text"),
-                 ("Left vs right", "0.17", "apart", "amber"),
-                 ("Signature", "sigma", "128 values - 4 cycles", "text")],
-    "person 11": [("Walk cycles", "1", "partial", "amber"),
-                  ("Cadence", "-", "not enough cycles", "text"),
-                  ("Stance : swing", "-", "not measured", "text"),
-                  ("Left vs right", "-", "not measured", "text"),
-                  ("Signature", "none", "too few cycles", "amber")],
-    "person 12": [("Walk cycles", "0", "complete", "amber"),
-                  ("Cadence", "-", "not enough cycles", "text"),
-                  ("Stance : swing", "-", "not measured", "text"),
-                  ("Left vs right", "-", "not measured", "text"),
-                  ("Signature", "none", "clip too short", "amber")],
-}
-
-
-def gait_metrics(person):
-    """Gait tiles for a person, falling back to an unmeasured set."""
-    return GAIT_METRICS.get(person, GAIT_METRICS["person 12"])
 
 # --- Walking (gait detail) ------------------------------------------------
 WALK_RESULTS = [

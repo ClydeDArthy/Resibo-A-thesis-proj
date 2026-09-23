@@ -102,10 +102,6 @@ def _dispatch(sender, app_data):
     if folders.is_open() and folders.click_outside(x, y):
         folders.hide()
         return
-    from .screens import picker
-    if picker.menu_open() and picker.menu_click_outside(x, y):
-        picker.hide_menu()
-        return
 
     hit, area = None, None
     for item, entry in list(_clickable.items()):

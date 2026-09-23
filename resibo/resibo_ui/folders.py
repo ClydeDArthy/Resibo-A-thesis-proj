@@ -5,7 +5,7 @@ the X or a click outside. Double-clicking a crop opens the full-size preview.
 """
 
 import dearpygui.dearpygui as dpg
-from . import data, state, theme as th, viewer, widgets as w, widgets_plot as wp
+from . import data, state, theme as th, viewer, widgets as w
 
 WIN_W, WIN_H = 760, 560
 PER_ROW = 3
@@ -36,21 +36,14 @@ def build():
 
 
 def show(ident, kind, person):
-    """Open the window on one identity folder.
-
-    A face folder lists its crops; a gait folder reports the walk instead.
-    """
+    """Open the window on one identity folder: its saved crops, face or gait."""
     dpg.set_value("folder_title", ident)
     dpg.delete_item("folder_grid", children_only=True)
     dpg.push_container_stack("folder_grid")
-    if kind == "gait":
-        dpg.set_value("folder_sub", "walk pattern . " + str(len(data.gait_metrics(person)))
-                      + " measurements")
-        _fill_gait(person)
-    else:
-        dpg.set_value("folder_sub", "face crops . {} items . double click to open"
-                      .format(len(data.FOLDER_ITEMS)))
-        _fill_crops(ident, person)
+    noun = "walk frames" if kind == "gait" else "face crops"
+    dpg.set_value("folder_sub", "{} . {} items . double click to open"
+                  .format(noun, len(data.FOLDER_ITEMS)))
+    _fill_crops(ident, kind, person)
     dpg.pop_container_stack()
 
     width, height = _viewport()
@@ -60,38 +53,28 @@ def show(ident, kind, person):
     _open[0] = True
 
 
-def _fill_crops(ident, person):
-    """The raw and enhanced crops saved for this identity."""
+def _fill_crops(ident, kind, person):
+    """The clean/raw and annotated/enhanced crops saved for this identity."""
     look = data.look(person)
     tile = w.share(WIN_W - 56, PER_ROW)
+    hi, lo = ("annotated", "clean") if kind == "gait" else ("enhanced", "raw")
+    caption = "walk frame " if kind == "gait" else "frame "
     for start in range(0, len(data.FOLDER_ITEMS), PER_ROW):
         with dpg.group(horizontal=True):
             for frame, enhanced in data.FOLDER_ITEMS[start:start + PER_ROW]:
-                item = w.face_tile("enhanced" if enhanced else "raw",
-                                   "frame " + frame, width=tile, height=TILE_H,
+                item = w.face_tile(hi if enhanced else lo,
+                                   caption + frame, width=tile, height=TILE_H,
                                    blurred=not enhanced, look=look, centered=True)
                 state.on_double_click(item, _preview,
-                                      (ident, frame, enhanced, person))
+                                      (ident, kind, frame, enhanced, person))
         w.spacer(10)
 
 
-def _fill_gait(person):
-    """Gait output for this identity: the measurements and the ankle chart."""
-    w.text("Gait output - movement", "text", "ui", wrap=-1)
-    w.spacer(10)
-    metrics = data.gait_metrics(person)
-    box_w = w.share(WIN_W - 56, len(metrics))
-    with dpg.group(horizontal=True):
-        for label, value, sub, tone in metrics:
-            w.stat_box(label, value, tone, sub, width=box_w)
-    w.spacer(14)
-    wp.gait_chart_frame()
-
-
 def _preview(sender, app_data, user_data):
-    ident, frame, enhanced, person = user_data
-    viewer.show(ident, "frame " + frame, data.look(person), enhanced,
-                data.folder_meta(ident, frame, enhanced))
+    ident, kind, frame, enhanced, person = user_data
+    caption = "walk frame " if kind == "gait" else "frame "
+    viewer.show(ident, caption + frame, data.look(person), enhanced,
+                data.folder_meta(ident, kind, frame, enhanced))
 
 
 def hide(sender=None, app_data=None, user_data=None):
