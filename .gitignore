@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+
+# Local preferences written at runtime (theme choice)
+resibo/settings.json
+
+# Editors / OS
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# Thesis manuscript — unpublished draft with author contact details.
+# Remove this line if you deliberately want it in the repository.
+resibo/images/*.pdf
