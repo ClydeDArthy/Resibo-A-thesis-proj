@@ -1,10 +1,5 @@
 # Resibo-A-thesis-proj
 
-**A Deep-Learning Based Forensic Surveillance Toolkit for Automated CCTV Evidence Review and Reporting**
-
-Undergraduate thesis — BS Computer Science, Digital Forensics
-College of Computing and Information Technologies, National University – Manila
-
 ## Running it
 
 ```bash
