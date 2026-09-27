@@ -6,8 +6,8 @@ workspace with the nav rail and the stage screens.
 
 import dearpygui.dearpygui as dpg
 
-from . import (actions, data, folders, icons, layout, player, settings,
-               splash, state, theme as th, viewer, widgets as w)
+from . import (actions, data, db, folders, icons, image_preview, layout, player,
+               scrim, settings, splash, state, theme as th, viewer, widgets as w)
 from .screens import (picker, newcase, progress, evidence, working_copy,
                       clips, people, faces, walking, history)
 
@@ -67,6 +67,8 @@ def open_case(index):
     dpg.configure_item("vault_line", show=True)
     dpg.set_value("examiner_name", data.CASES[index].get("examiner", "-"))
     progress.refresh()
+    evidence.refresh()
+    clips.refresh()
     history.refresh()
     _select(0)
     actions.toast("Opened " + data.CASES[index]["number"])
@@ -90,7 +92,9 @@ def start_new_case():
 def back_to_cases(sender=None, app_data=None, user_data=None):
     """Return to the case picker."""
     viewer.hide()
+    image_preview.hide()
     folders.hide()
+    scrim.hide()
     dpg.configure_item("workspace", show=False)
     dpg.configure_item("newcase", show=False)
     dpg.configure_item("nav_rail", show=False)
@@ -120,16 +124,20 @@ def _ask_delete(sender=None, app_data=None, user_data=None):
         height = dpg.get_viewport_client_height()
     except Exception:
         width, height = 1500, 940
+    scrim.show()
     dpg.configure_item("confirm_delete", show=True,
                        pos=((width - CONFIRM_W) // 2, (height - CONFIRM_H) // 2))
+    dpg.focus_item("confirm_delete")
 
 
 def _do_delete(sender=None, app_data=None, user_data=None):
     index = picker.selected()
+    scrim.hide()
     if index is None:                     # the selection went away meanwhile
         dpg.configure_item("confirm_delete", show=False)
         return
     number = data.CASES[index]["number"]
+    db.delete_case(number)
     del data.CASES[index]
     state.SEL["case"] = min(state.SEL["case"], max(0, len(data.CASES) - 1))
     dpg.configure_item("confirm_delete", show=False)
@@ -138,6 +146,7 @@ def _do_delete(sender=None, app_data=None, user_data=None):
 
 
 def _cancel_delete(sender=None, app_data=None, user_data=None):
+    scrim.hide()
     dpg.configure_item("confirm_delete", show=False)
 
 
@@ -273,17 +282,21 @@ def set_theme(name):
 
     # Themes are baked into every item, so the interface is rebuilt.
     viewer.hide()
+    image_preview.hide()
     folders.hide()
-    for tag in ("viewer", "folder_win", "confirm_delete",
-                "dlg_browse", "dlg_export", "dlg_evidence"):
+    scrim.hide()
+    for tag in ("viewer", "image_preview", "folder_win",
+                "confirm_delete", "dlg_export", "ev_remove_confirm", "scrim"):
         if dpg.does_item_exist(tag):
             dpg.delete_item(tag)
     dpg.delete_item("primary", children_only=True)
 
     actions.build_dialogs()
-    newcase.build_dialog()
+    scrim.build()
     _confirm_dialog()
+    evidence.build_dialog()
     viewer.build()
+    image_preview.build()
     folders.build()
 
     dpg.push_container_stack("primary")
@@ -306,9 +319,11 @@ def run():
     actions.build_dialogs()
     picker.set_handlers(open_case, start_new_case, _on_pick, set_theme)
     newcase.set_handler(open_case, back_to_cases)
-    newcase.build_dialog()
+    scrim.build()
     _confirm_dialog()
+    evidence.build_dialog()
     viewer.build()
+    image_preview.build()
     folders.build()
     history.install_clock()
     progress.set_opener(_select)

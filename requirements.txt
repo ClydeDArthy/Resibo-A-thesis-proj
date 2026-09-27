@@ -1,1 +1,2 @@
 dearpygui>=2.0
+opencv-python-headless>=4.8

@@ -9,9 +9,22 @@ import os
 
 CHUNK = 2 * 1024 * 1024        # bytes read per frame, per file
 
+# Only these come off a camera export: stills as JPEG, footage as MP4, or the
+# native Dahua/Hikvision recording formats.
+ALLOWED_EXTS = {".jpg", ".jpeg", ".mp4", ".dav", ".asf"}
+VIDEO_EXTS = {".mp4", ".dav", ".asf"}
+
 # Each entry: name, path, size, read, sha (running), digest, state.
 # state is one of: reading, done, error
 FILES = []
+
+
+def is_allowed(path):
+    return os.path.splitext(path)[1].lower() in ALLOWED_EXTS
+
+
+def is_video(path):
+    return os.path.splitext(path)[1].lower() in VIDEO_EXTS
 
 
 def size_text(num):
@@ -26,8 +39,10 @@ def size_text(num):
 
 
 def add(path):
-    """Queue one file for hashing. Ignores duplicates."""
+    """Queue one file for hashing. Ignores duplicates and disallowed types."""
     path = os.path.abspath(path)
+    if not is_allowed(path):
+        return None
     if any(f["path"] == path for f in FILES):
         return None
     try:

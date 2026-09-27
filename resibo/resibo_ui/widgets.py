@@ -1,7 +1,13 @@
 """Small reusable building blocks shared by every RESIBO screen."""
 
+import os
 import dearpygui.dearpygui as dpg
 from . import theme as th
+
+_SILHOUETTE_PATH = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    "images", "person_silhouette.png")
+_SILHOUETTE_TAG = "tex_person_silhouette"
 
 
 def font(tag, name):
@@ -244,30 +250,26 @@ def table(headers, rows, weights=None, highlight=-1, height=0, on_select=None):
     return tbl
 
 
-def _figure(cx, ground, box_h, look, dim=False):
-    """Draw one person: head, hair and torso, tinted by their look."""
-    shade = 0.55 if dim else 1.0
-    skin = tuple(int(c * shade) for c in look["skin"])
-    hair = tuple(int(c * shade) for c in look["hair"])
-    shirt = tuple(int(c * shade) for c in look["shirt"])
+def _silhouette_texture():
+    """The generic person silhouette, loaded once and cached as a texture."""
+    if dpg.does_item_exist(_SILHOUETTE_TAG):
+        return _SILHOUETTE_TAG
+    if not os.path.isfile(_SILHOUETTE_PATH):
+        return None
+    width, height, _channels, data = dpg.load_image(_SILHOUETTE_PATH)
+    with dpg.texture_registry():
+        dpg.add_static_texture(width, height, data, tag=_SILHOUETTE_TAG)
+    return _SILHOUETTE_TAG
 
-    head_r = box_h * 0.105 * look["build"]
-    head_cy = ground - box_h * 0.80
-    body_top = head_cy + head_r * 0.7
-    half = box_h * 0.20 * look["build"]
 
-    dpg.draw_ellipse((cx - half, body_top), (cx + half, ground), fill=shirt, color=shirt)
-    dpg.draw_circle((cx, head_cy), head_r, fill=skin, color=skin)
-    # Hair sits on the upper part of the head.
-    if look["hair_style"] == "long":
-        dpg.draw_ellipse((cx - head_r, head_cy - head_r),
-                         (cx + head_r, head_cy + head_r * 1.5), fill=hair, color=hair)
-        dpg.draw_circle((cx, head_cy + head_r * 0.15), head_r * 0.78, fill=skin, color=skin)
-    elif look["hair_style"] == "cap":
-        dpg.draw_ellipse((cx - head_r * 1.1, head_cy - head_r * 1.1),
-                         (cx + head_r * 1.1, head_cy + head_r * 0.1), fill=hair, color=hair)
-    else:
-        dpg.draw_circle((cx, head_cy - head_r * 0.25), head_r * 0.92, fill=hair, color=hair)
+def _figure(cx, ground, box_w, box_h, dim=False):
+    """Draw the generic person silhouette, filling its detection box."""
+    tex = _silhouette_texture()
+    if not tex:
+        return
+    alpha = 130 if dim else 220
+    dpg.draw_image(tex, (cx - box_w / 2, ground - box_h), (cx + box_w / 2, ground),
+                   color=(255, 255, 255, alpha))
 
 
 def video_frame(width, height, cam_label, time_label, boxes=(), corner="", looks=None):
@@ -289,9 +291,8 @@ def video_frame(width, height, cam_label, time_label, boxes=(), corner="", looks
             x, y = fx * width, fy * height
             bw, bh = fw * width, fh * height
             col = th.GREEN if tone == "green" else th.AMBER
-            look = (looks or {}).get(label) or _neutral_look(i)
 
-            _figure(x + bw / 2, y + bh, bh, look, dim=(tone != "green"))
+            _figure(x + bw / 2, y + bh, bw, bh, dim=(tone != "green"))
             dpg.draw_rectangle((x, y), (x + bw, y + bh), color=col, thickness=1.5)
 
             # Label sits above the box, or inside it when there is no room.
@@ -312,16 +313,6 @@ def video_frame(width, height, cam_label, time_label, boxes=(), corner="", looks
     return dl
 
 
-def _neutral_look(seed=0):
-    """Fallback appearance when a person has no entry of their own."""
-    palettes = [((168, 124, 96), (44, 32, 26), (78, 92, 104), "short"),
-                ((140, 100, 78), (28, 22, 20), (92, 76, 68), "cap"),
-                ((198, 160, 130), (96, 72, 40), (66, 84, 78), "long")]
-    skin, hair, shirt, style = palettes[seed % len(palettes)]
-    return {"skin": skin, "hair": hair, "shirt": shirt,
-            "build": 1.0, "height": 1.0, "hair_style": style}
-
-
 def center_text(value, width, color="text", fnt="ui_sm", char=7.0):
     """Draw text centred in a column of `width` pixels."""
     with dpg.group(horizontal=True):
@@ -332,9 +323,8 @@ def center_text(value, width, color="text", fnt="ui_sm", char=7.0):
 
 
 def face_tile(caption, sub, width=195, height=200, blurred=False, selected=False,
-              letter="", landmarks=False, bbox=False, look=None, centered=False):
-    """Face-analysis thumbnail: a drawn portrait plus its caption."""
-    look = look or _neutral_look()
+              letter="", landmarks=False, bbox=False, centered=False):
+    """Face-analysis thumbnail: the example portrait plus its caption."""
     # Reserve room for the caption (and sub) so neither is clipped. A centred
     # line sits in its own group, which costs about 28 px including spacing.
     sub_lines = 1 if sub else 0
@@ -342,46 +332,34 @@ def face_tile(caption, sub, width=195, height=200, blurred=False, selected=False
     with dpg.child_window(width=width, height=height, border=True, no_scrollbar=True, no_scroll_with_mouse=True) as tile:
         w = width - 20
         with dpg.drawlist(width=w, height=art_h):
-            fade = 0.72 if blurred else 1.0      # unsharpened crops read flatter
-            skin = tuple(int(c * fade) for c in look["skin"])
-            hair = tuple(int(c * fade) for c in look["hair"])
-            shirt = tuple(int(c * fade) for c in look["shirt"])
-
             dpg.draw_rectangle((0, 0), (w, art_h), fill=(24, 29, 34), color=(0, 0, 0, 0))
-            dpg.draw_ellipse((w * 0.24, art_h * 0.60), (w * 0.76, art_h * 1.32),
-                             fill=shirt, color=shirt)                     # shoulders
-            head_r = art_h * 0.26 * look["build"]
-            cy = art_h * 0.46
-            dpg.draw_circle((w / 2, cy), head_r, fill=skin, color=skin)
 
-            if look["hair_style"] == "long":
-                dpg.draw_ellipse((w / 2 - head_r, cy - head_r),
-                                 (w / 2 + head_r, cy + head_r * 1.35), fill=hair, color=hair)
-                dpg.draw_circle((w / 2, cy + head_r * 0.12), head_r * 0.80,
-                                fill=skin, color=skin)
-            elif look["hair_style"] == "cap":
-                dpg.draw_ellipse((w / 2 - head_r * 1.08, cy - head_r * 1.1),
-                                 (w / 2 + head_r * 1.08, cy + head_r * 0.05),
-                                 fill=hair, color=hair)
-            else:
-                dpg.draw_circle((w / 2, cy - head_r * 0.28), head_r * 0.92,
-                                fill=hair, color=hair)
+            tex = _silhouette_texture()
+            if tex:
+                img_h = min(art_h * 0.95, w)
+                img_w = img_h
+                left, top = (w - img_w) / 2, (art_h - img_h) / 2
+                alpha = 165 if blurred else 235      # unsharpened crops read flatter
+                dpg.draw_image(tex, (left, top), (left + img_w, top + img_h),
+                               color=(255, 255, 255, alpha))
 
-            if not blurred:                       # the sharpened copy resolves eyes
-                for dx in (-head_r * 0.38, head_r * 0.38):
-                    dpg.draw_circle((w / 2 + dx, cy + head_r * 0.05), head_r * 0.13,
-                                    fill=(238, 240, 242), color=(238, 240, 242))
-                    dpg.draw_circle((w / 2 + dx, cy + head_r * 0.05), head_r * 0.06,
-                                    fill=(20, 22, 26), color=(20, 22, 26))
-            if landmarks:                         # RetinaFace 5-point marks
-                for px, py in ((-0.38, 0.05), (0.38, 0.05), (0.0, 0.42),
-                               (-0.26, 0.72), (0.26, 0.72)):
-                    dpg.draw_circle((w / 2 + head_r * px, cy + head_r * py), 2.5,
-                                    fill=th.GREEN, color=th.GREEN)
-            if bbox:                              # the detected face box
-                dpg.draw_rectangle((w / 2 - head_r * 1.35, cy - head_r * 1.5),
-                                   (w / 2 + head_r * 1.35, cy + head_r * 1.25),
-                                   color=th.AMBER, thickness=2)
+                # Measured against the actual silhouette: the head runs from
+                # about 6% to 60% of the image height, and about 26% either
+                # side of centre.
+                cx = left + img_w / 2
+                head_top, head_bottom = top + img_h * 0.06, top + img_h * 0.60
+                head_cy = (head_top + head_bottom) / 2
+                half_h = (head_bottom - head_top) / 2
+                half_w = img_w * 0.26
+
+                if landmarks:                         # RetinaFace 5-point marks
+                    for px, py in ((-0.55, -0.35), (0.55, -0.35), (0.0, 0.10),
+                                   (-0.40, 0.55), (0.40, 0.55)):
+                        dpg.draw_circle((cx + half_w * px, head_cy + half_h * py), 2.5,
+                                        fill=th.GREEN, color=th.GREEN)
+                if bbox:                              # the detected face box
+                    dpg.draw_rectangle((cx - half_w, head_top), (cx + half_w, head_bottom),
+                                       color=th.AMBER, thickness=2)
             if letter:
                 dpg.draw_rectangle((6, 6), (24, 24), color=th.BORDER, fill=(28, 34, 40))
                 dpg.draw_text((11, 6), letter, size=13, color=th.TEXT_DIM)
@@ -394,6 +372,111 @@ def face_tile(caption, sub, width=195, height=200, blurred=False, selected=False
             text(caption, "text", "ui_sm", wrap=-1)
             if sub:
                 text(sub, "faint", "mono_sm", wrap=-1)
+    dpg.bind_item_theme(tile, th.T["card_sel"] if selected else th.T["card"])
+    return tile
+
+
+_IMG_CACHE = {}
+
+
+def image_texture(path):
+    """A cached (tag, width, height) DPG texture for a still image file."""
+    cached = _IMG_CACHE.get(path)
+    if cached and dpg.does_item_exist(cached[0]):
+        return cached
+    if not os.path.isfile(path):
+        return None
+    try:
+        width, height, _channels, data = dpg.load_image(path)
+    except Exception:
+        return None
+    tag = "evtex_{}".format(abs(hash(path)))
+    with dpg.texture_registry():
+        dpg.add_static_texture(width, height, data, tag=tag)
+    _IMG_CACHE[path] = (tag, width, height)
+    return _IMG_CACHE[path]
+
+
+def _thumb_texture(path):
+    """A real preview (tag, width, height) for an image or video file, else None."""
+    ext = os.path.splitext(path)[1].lower()
+    if ext in (".jpg", ".jpeg", ".png"):
+        return image_texture(path)
+    if ext in (".mp4", ".dav", ".asf"):
+        from . import video
+        return video.frame_texture(path, 0.0)
+    return None
+
+
+def _is_video_path(path):
+    return os.path.splitext(path)[1].lower() in (".mp4", ".dav", ".asf")
+
+
+def _draw_file_icon(cx, cy, label=""):
+    """A generic file icon - a page with a folded corner - labelled by type."""
+    w_, h_, fold = 46, 58, 16
+    left, top = cx - w_ / 2, cy - h_ / 2
+    right, bottom = cx + w_ / 2, cy + h_ / 2
+    page = (58, 66, 76)
+
+    dpg.draw_polygon([(left, top), (right - fold, top), (right, top + fold),
+                      (right, bottom), (left, bottom)],
+                     fill=page, color=th.TEXT_FAINT, thickness=1.3)
+    dpg.draw_triangle((right - fold, top), (right, top + fold), (right - fold, top + fold),
+                      fill=(40, 46, 52), color=th.TEXT_FAINT, thickness=1.0)
+
+    if label:
+        band_h = 18
+        dpg.draw_rectangle((left, bottom - band_h), (right, bottom),
+                           fill=th.BLUE, color=th.BLUE)
+        dpg.draw_text((cx - len(label) * 3.6, bottom - band_h + 3), label,
+                      size=13, color=(255, 255, 255, 255))
+
+
+def _draw_play_badge(cx, cy, r=18):
+    """A play-button badge over a video thumbnail, like a media player's."""
+    dpg.draw_circle((cx, cy), r, fill=(0, 0, 0, 150), color=(255, 255, 255, 70))
+    tw, tall = r * 0.7, r * 0.8
+    dpg.draw_triangle((cx - tw * 0.30, cy - tall / 2), (cx - tw * 0.30, cy + tall / 2),
+                      (cx + tw * 0.65, cy), fill=(255, 255, 255, 235), color=(255, 255, 255, 235))
+
+
+def evidence_thumb(path, name, width=160, note="", selected=False,
+                   on_remove=None, user_data=None):
+    """A file-manager-style thumbnail: a perfectly square, unstretched preview,
+    with the filename and size/status always fully visible beneath it."""
+    art_w = width - 20                  # the image area is a true square
+    img_h = art_w
+    caption_h = 64                      # room for a name that wraps to two lines, plus note
+    height = img_h + caption_h + 16
+
+    with dpg.child_window(width=width, height=height, border=True,
+                          no_scrollbar=True, no_scroll_with_mouse=True) as tile:
+        if on_remove:
+            with dpg.group(horizontal=True):
+                dpg.add_spacer(width=width - 42)
+                close = dpg.add_button(label="x", width=20, height=20,
+                                       callback=on_remove, user_data=user_data)
+                dpg.bind_item_theme(close, th.T["btn_ghost"])
+        with dpg.drawlist(width=art_w, height=img_h):
+            dpg.draw_rectangle((0, 0), (art_w, img_h), fill=(20, 24, 28), color=(0, 0, 0, 0))
+            found = _thumb_texture(path)
+            if found:
+                tag, src_w, src_h = found
+                # Fit the real frame inside the square without stretching it.
+                scale = min((art_w - 6) / src_w, (img_h - 6) / src_h)
+                draw_w, draw_h = src_w * scale, src_h * scale
+                left, top = (art_w - draw_w) / 2, (img_h - draw_h) / 2
+                dpg.draw_image(tag, (left, top), (left + draw_w, top + draw_h))
+                if _is_video_path(path):
+                    _draw_play_badge(art_w / 2, img_h / 2)
+            else:                                  # generic file icon fallback
+                ext = os.path.splitext(path)[1].lstrip(".").upper()
+                _draw_file_icon(art_w / 2, img_h / 2, ext)
+        spacer(4)
+        center_text(name, art_w, "text", "ui_sm", char=6.4)
+        if note:
+            center_text(note, art_w, "faint", "mono_sm", char=6.0)
     dpg.bind_item_theme(tile, th.T["card_sel"] if selected else th.T["card"])
     return tile
 

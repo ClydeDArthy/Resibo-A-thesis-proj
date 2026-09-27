@@ -5,8 +5,9 @@ __pycache__/
 venv/
 env/
 
-# Local preferences written at runtime (theme choice)
+# Local preferences and case data written at runtime
 resibo/settings.json
+resibo/resibo.db
 
 # Editors / OS
 .vscode/

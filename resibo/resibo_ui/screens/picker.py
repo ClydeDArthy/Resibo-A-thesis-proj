@@ -232,7 +232,7 @@ def _draw(entry):
         arm = 22 + lift * 4
         dpg.draw_line((cx - arm, cy), (cx + arm, cy), color=edge, thickness=3)
         dpg.draw_line((cx, cy - arm), (cx, cy + arm), color=edge, thickness=3)
-        label, sub, tone = "Add another case", "manual intake", edge
+        label, sub, tone = "Add another case", "", edge
     else:
         case = data.CASES[entry["index"]]
         tone = th.GREEN if case["tone"] == "green" else th.BLUE

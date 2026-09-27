@@ -55,7 +55,6 @@ def show(ident, kind, person):
 
 def _fill_crops(ident, kind, person):
     """The clean/raw and annotated/enhanced crops saved for this identity."""
-    look = data.look(person)
     tile = w.share(WIN_W - 56, PER_ROW)
     hi, lo = ("annotated", "clean") if kind == "gait" else ("enhanced", "raw")
     caption = "walk frame " if kind == "gait" else "frame "
@@ -64,7 +63,7 @@ def _fill_crops(ident, kind, person):
             for frame, enhanced in data.FOLDER_ITEMS[start:start + PER_ROW]:
                 item = w.face_tile(hi if enhanced else lo,
                                    caption + frame, width=tile, height=TILE_H,
-                                   blurred=not enhanced, look=look, centered=True)
+                                   blurred=not enhanced, centered=True)
                 state.on_double_click(item, _preview,
                                       (ident, kind, frame, enhanced, person))
         w.spacer(10)

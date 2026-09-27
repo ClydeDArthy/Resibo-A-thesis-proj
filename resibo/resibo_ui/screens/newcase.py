@@ -5,9 +5,10 @@ case is only created once the evidence is sealed.
 """
 
 import datetime
+import os
 import dearpygui.dearpygui as dpg
 
-from .. import actions, data, layout, theme as th, uploads, widgets as w
+from .. import actions, data, db, image_preview, layout, theme as th, uploads, widgets as w
 
 TITLE = "New case"
 CRUMB = ("New case", "Details")
@@ -16,17 +17,72 @@ ACTION = None
 FORM_W = 940
 COL_W = 450
 
-# Every field, in order, with its label and placeholder.
+# Every field, in order, with its label and format hint.
 FIELDS = [
-    ("nc_case_name", "Case name", "Alleged theft - Warehouse B"),
-    ("nc_case_number", "Case number", "CASE-2026-11D"),
-    ("nc_base_dir", "Base directory", "/var/evidence/cases/2026-11D"),
-    ("nc_camera", "Camera", "HIKVISION 23MN"),
-    ("nc_camera_loc", "Camera location", "Warehouse Bh CAM - 04"),
-    ("nc_name", "Examiner name", "Maria Edona I. Inocencio"),
-    ("nc_phone", "Phone", "+639 17 555 0143"),
-    ("nc_email", "Email", "einocencio@students.nu-manila.edu.ph"),
+    ("nc_case_name", "Case name", ""),
+    ("nc_case_number", "Case number", ""),
+    ("nc_base_dir", "Base directory", ""),
+    ("nc_camera", "Camera", ""),
+    ("nc_camera_loc", "Camera location", ""),
+    ("nc_name", "Examiner name", ""),
+    ("nc_phone", "Phone", ""),
+    ("nc_email", "Email", ""),
 ]
+
+CASE_NAME_PREFIX = "CASE - "
+PHONE_PREFIX = "+639 - "
+CASE_SUFFIX_LEN = 3         # e.g. 09A
+PHONE_SUFFIX_LEN = 9        # +639 already covers the leading 9 of "09XXXXXXXXX"
+
+
+def _case_number_prefix():
+    """System-set prefix: CASE-<this year>-, the user only fills in the rest."""
+    return "CASE-{}-".format(datetime.date.today().year)
+
+
+def _clean(sender, allowed=None, max_len=None, upper=False):
+    """Filter what the user typed. The prefix itself is a separate, read-only
+    label next to the field, so it never appears in the value and can't be
+    edited or erased. Returns True if a keystroke had to be rejected."""
+    value = dpg.get_value(sender) or ""
+    working = value.upper() if upper else value
+    rejected = False
+    if allowed:
+        kept = "".join(ch for ch in working if allowed(ch))
+        rejected = len(kept) != len(working)
+        working = kept
+    if max_len is not None and len(working) > max_len:
+        rejected = True
+        working = working[:max_len]
+    if working != value:
+        dpg.set_value(sender, working)
+    return rejected
+
+
+def _on_case_name(sender, app_data=None):
+    _clean(sender, upper=True)
+    _refresh()
+
+
+def _on_case_number(sender, app_data=None):
+    if _clean(sender, allowed=str.isalnum, max_len=CASE_SUFFIX_LEN, upper=True):
+        actions.toast("Case number: letters or numbers only, 3 characters max", "amber")
+    _refresh()
+
+
+def _on_phone(sender, app_data=None):
+    if _clean(sender, allowed=str.isdigit, max_len=PHONE_SUFFIX_LEN):
+        actions.toast("Phone: numbers only, 9 digits max", "amber")
+    _refresh()
+
+
+# Fields with a fixed, system-set prefix shown as a read-only chip beside the
+# box, and the callback that filters what the user types into the rest.
+_MASKS = {
+    "nc_case_name": (lambda: CASE_NAME_PREFIX, _on_case_name),
+    "nc_case_number": (_case_number_prefix, _on_case_number),
+    "nc_phone": (lambda: PHONE_PREFIX, _on_phone),
+}
 
 _created = [None]          # app.run() supplies the "case is ready" callback
 _cancelled = [None]        # and the way back out of a new case
@@ -76,12 +132,25 @@ def _field(tag, label, hint, width=COL_W, browse=False):
     with dpg.group():
         w.text(label, "dim", "ui_sm", wrap=-1)
         with dpg.group(horizontal=True):
-            box = dpg.add_input_text(tag=tag, width=width, hint=hint,
-                                     callback=lambda s, a: _refresh())
+            masked = _MASKS.get(tag)
+            if masked:
+                prefix_fn, callback = masked
+                prefix_str = prefix_fn()
+                chip = dpg.add_text(prefix_str)
+                dpg.bind_item_theme(chip, th.T["txt_dim"])
+                w.font(chip, "mono")
+                chip_w = len(prefix_str) * 9 + 14
+                box = dpg.add_input_text(tag=tag, width=max(60, width - chip_w),
+                                         hint=hint, callback=callback)
+            else:
+                box = dpg.add_input_text(tag=tag, width=width, hint=hint,
+                                         callback=lambda s, a: _refresh())
             w.font(box, "mono")
             if browse:
                 b = dpg.add_button(label="Browse", width=90, callback=actions.browse)
                 dpg.bind_item_theme(b, th.T["btn_ghost"])
+        if tag == "nc_phone":
+            w.text("You may receive notifications from us.", "faint", "ui_sm", wrap=-1)
 
 
 def _pair(left, right):
@@ -115,17 +184,29 @@ def _refresh():
     state.rebuild("nc_evidence", _fill_evidence)
 
 
+def ingest_directory(path):
+    """Queue every supported file found under `path`. Returns how many."""
+    added = 0
+    for root, _dirs, names in os.walk(path):
+        for name in sorted(names):
+            full = os.path.join(root, name)
+            if uploads.is_allowed(full) and uploads.add(full):
+                added += 1
+    return added
+
+
 def _pick_files(sender=None, app_data=None, user_data=None):
-    dpg.show_item("dlg_evidence")
-
-
-def _files_chosen(sender, app_data):
-    """Queue everything the dialog returned."""
-    chosen = app_data.get("selections") or {}
-    for path in chosen.values():
+    """Native picker for evidence files; queue whatever comes back."""
+    paths = actions.pick_evidence_files()
+    rejected = 0
+    for path in paths:
+        if not uploads.is_allowed(path):
+            rejected += 1
+            continue
         uploads.add(path)
-    if not chosen and app_data.get("file_path_name"):
-        uploads.add(app_data["file_path_name"])
+    if rejected:
+        actions.toast("{} file(s) skipped - only JPEG, MP4, DAV or ASF are allowed"
+                      .format(rejected), "amber")
     _refresh()
 
 
@@ -142,14 +223,17 @@ def _seal(sender=None, app_data=None, user_data=None):
     count, total = uploads.totals()
     case = {
         "examiner": dpg.get_value("nc_name").strip(),
-        "number": dpg.get_value("nc_case_number").strip(),
+        "number": _case_number_prefix() + dpg.get_value("nc_case_number").strip(),
         "place": dpg.get_value("nc_camera_loc").strip(),
         "badge": "Active", "tone": "green",
-        "name": dpg.get_value("nc_case_name").strip(),
+        "name": CASE_NAME_PREFIX + dpg.get_value("nc_case_name").strip(),
         "opened": datetime.date.today().isoformat(),
         "exhibits": count, "flags": 0, "chain": "verified",
         "status": "Ready", "done": 0,
+        "base_dir": dpg.get_value("nc_base_dir").strip(),
     }
+    db.insert_case(case)
+    db.insert_evidence(case["number"], uploads.FILES)
     data.CASES.append(case)
     actions.toast("Sealed {} exhibit(s) - {}".format(count, uploads.size_text(total)))
     if _created[0]:
@@ -202,51 +286,34 @@ def _fill_evidence():
     if not uploads.FILES:
         w.text("No files yet. Add the recordings for this case.", "faint", "ui_sm", wrap=-1)
         return
+    w.text("Double-click a file to preview it.", "faint", "ui_sm", wrap=-1)
+    w.spacer(8)
 
-    for i, entry in enumerate(uploads.FILES):
-        _file_row(i, entry)
-        w.spacer(6)
+    THUMBS_PER_ROW = 4
+    thumb_w = w.share(FORM_W - 40, THUMBS_PER_ROW)
+    w.tile_grid(len(uploads.FILES), THUMBS_PER_ROW,
+               lambda i: _file_thumb(i, uploads.FILES[i], thumb_w))
 
 
-def _file_row(index, entry):
-    """One file: name, size, progress or hash, and a remove or cancel button."""
+def _file_thumb(index, entry, width):
+    """One file as a real thumbnail: image or video frame, name and status."""
     reading = entry["state"] == "reading"
-    with dpg.child_window(auto_resize_y=True, border=True, no_scrollbar=True,
-                          no_scroll_with_mouse=True) as row:
-        with dpg.table_row(parent=w.split_row(0)):
-            with dpg.group():
-                w.text(entry["name"], "text", "ui", wrap=-1)
-                if entry["state"] == "error":
-                    w.text("could not be read", "amber", "mono_sm", wrap=-1)
-                elif reading:
-                    w.text("{}  .  hashing {:.0f}%".format(
-                        uploads.size_text(entry["size"]),
-                        uploads.progress(entry) * 100), "dim", "mono_sm", wrap=-1)
-                else:
-                    w.text("{}  .  {}...".format(uploads.size_text(entry["size"]),
-                                                 entry["digest"][:16]),
-                           "dim", "mono_sm", wrap=-1)
-            with dpg.group():
-                w.spacer(4)
-                btn = dpg.add_button(label="Cancel" if reading else "Remove",
-                                     width=100, callback=_drop_file, user_data=index)
-                dpg.bind_item_theme(btn, th.T["btn_ghost"])
-        if reading:
-            bar = dpg.add_progress_bar(default_value=uploads.progress(entry),
-                                       width=-1, height=4, overlay="")
-            dpg.bind_item_theme(bar, th.T["bar_blue"])
-    dpg.bind_item_theme(row, th.T["card"])
+    if entry["state"] == "error":
+        note = "could not be read"
+    elif reading:
+        note = "hashing {:.0f}%".format(uploads.progress(entry) * 100)
+    else:
+        note = uploads.size_text(entry["size"])
 
-
-def build_dialog():
-    """Multi-select file dialog for the evidence files."""
-    with dpg.file_dialog(tag="dlg_evidence", label="Add evidence files",
-                         directory_selector=False, show=False, modal=True,
-                         width=760, height=480, callback=_files_chosen):
-        dpg.add_file_extension(".*")
-        dpg.add_file_extension(".mp4", color=(74, 222, 128))
-        dpg.add_file_extension(".avi", color=(74, 222, 128))
-        dpg.add_file_extension(".mkv", color=(74, 222, 128))
+    tile = w.evidence_thumb(entry["path"], entry["name"], width=width,
+                            note=note, on_remove=_drop_file, user_data=index)
+    if not reading:
+        from .. import state
+        path = entry["path"]
+        if uploads.is_video(path):
+            state.on_double_click(tile, lambda s, a, u: actions.open_external(path))
+        elif os.path.splitext(path)[1].lower() in (".jpg", ".jpeg", ".png"):
+            state.on_double_click(tile, lambda s, a, u: image_preview.show(path))
 
 
 def tick():

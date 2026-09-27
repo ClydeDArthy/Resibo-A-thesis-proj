@@ -88,8 +88,7 @@ def _fill_main():
         for letter, caption, sub in data.WALK_STAGES:
             w.face_tile(caption, sub, width=stage_w, height=196,
                         blurred=(letter in "ab"), selected=(letter == "e"),
-                        letter=letter, landmarks=(letter == "c"),
-                        look=data.look(person))
+                        letter=letter, landmarks=(letter == "c"))
 
     w.spacer(16)
     w.section("Walking results", "one cycle = heel down to heel down again")

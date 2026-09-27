@@ -65,7 +65,7 @@ def _tiles():
 
 
 def _fill_tiles():
-    identity, _sub, _tone, person = data.FACE_PERSONS[state.SEL["face_person"]]
+    identity, _sub, _tone, _person = data.FACE_PERSONS[state.SEL["face_person"]]
     frame = data.FACE_FRAMES[state.SEL["face_person"]]
 
     w.text("{} . frame {}".format(identity, frame), "text", "ui", wrap=-1)
@@ -77,7 +77,7 @@ def _fill_tiles():
             for caption, sub, blurred, bbox, landmarks in data.FACE_TILES[i:i + PER_ROW]:
                 w.face_tile(caption, sub, width=tile_w, height=TILE_H,
                             blurred=blurred, bbox=bbox, landmarks=landmarks,
-                            look=data.look(person), centered=True)
+                            centered=True)
         w.spacer(10)
 
 

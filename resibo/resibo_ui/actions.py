@@ -2,6 +2,8 @@
 
 import json
 import os
+import subprocess
+import sys
 import dearpygui.dearpygui as dpg
 
 from . import data, state, theme as th
@@ -43,19 +45,72 @@ def next_screen(sender=None, app_data=None, user_data=None):
 
 # --- File dialogs ---------------------------------------------------------
 
-def _picked_dir(sender, app_data):
-    """Write the chosen folder back into the new-case base directory field."""
-    path = app_data.get("file_path_name") or app_data.get("current_path", "")
-    if path and dpg.does_item_exist("nc_base_dir"):
-        dpg.set_value("nc_base_dir", path.replace("\\", "/"))
-        toast("Base directory set")
-        from .screens import newcase
-        newcase._refresh()
+def _native_pick_directory():
+    """Open the OS's own file manager to pick a folder, starting at the Desktop."""
+    import tkinter as tk
+    from tkinter import filedialog
+
+    desktop = os.path.join(os.path.expanduser("~"), "Desktop")
+    if not os.path.isdir(desktop):
+        desktop = os.path.expanduser("~")
+
+    root = tk.Tk()
+    root.withdraw()
+    root.attributes("-topmost", True)
+    try:
+        return filedialog.askdirectory(initialdir=desktop,
+                                       title="Select evidence base directory")
+    finally:
+        root.destroy()
 
 
 def browse(sender=None, app_data=None, user_data=None):
-    """Open a folder picker for the evidence base directory."""
-    dpg.show_item("dlg_browse")
+    """Open the desktop's native file manager and queue whatever it holds."""
+    path = _native_pick_directory()
+    if not path or not dpg.does_item_exist("nc_base_dir"):
+        return
+    dpg.set_value("nc_base_dir", path.replace("\\", "/"))
+    from .screens import newcase
+    added = newcase.ingest_directory(path)
+    toast("Base directory set - {} file(s) queued".format(added) if added
+         else "Base directory set")
+    newcase._refresh()
+
+
+def pick_evidence_files():
+    """Native multi-select picker for evidence files, starting at the Desktop."""
+    import tkinter as tk
+    from tkinter import filedialog
+
+    desktop = os.path.join(os.path.expanduser("~"), "Desktop")
+    if not os.path.isdir(desktop):
+        desktop = os.path.expanduser("~")
+
+    root = tk.Tk()
+    root.withdraw()
+    root.attributes("-topmost", True)
+    try:
+        paths = filedialog.askopenfilenames(
+            initialdir=desktop, title="Add evidence files",
+            filetypes=[("Evidence files (JPEG, MP4, DAV, ASF)",
+                       "*.jpg *.jpeg *.mp4 *.dav *.asf"),
+                      ("All files", "*.*")])
+    finally:
+        root.destroy()
+    return list(paths)
+
+
+def open_external(path):
+    """Open a file with whatever the OS uses to play it, e.g. to preview a video."""
+    try:
+        if sys.platform.startswith("win"):
+            os.startfile(path)
+        elif sys.platform == "darwin":
+            subprocess.Popen(["open", path])
+        else:
+            subprocess.Popen(["xdg-open", path])
+    except OSError as err:
+        toast("Could not open file: {}".format(err), "amber")
 
 
 def _picked_export(sender, app_data):
@@ -104,10 +159,6 @@ def export(sender=None, app_data=None, user_data=None):
 
 def build_dialogs():
     """Create the file dialogs once, hidden, at startup."""
-    dpg.add_file_dialog(tag="dlg_browse", label="Select evidence base directory",
-                        directory_selector=True, show=False, modal=True,
-                        width=720, height=460, callback=_picked_dir)
-
     with dpg.file_dialog(tag="dlg_export", label="Export audit trail",
                          directory_selector=False, show=False, modal=True,
                          default_filename="audit_trail", width=720, height=460,
