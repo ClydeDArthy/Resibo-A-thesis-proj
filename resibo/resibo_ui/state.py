@@ -81,8 +81,8 @@ def _hit(registry):
 
 def _dispatch_double(sender, app_data):
     """Fire the double-click callback under the cursor."""
-    from . import image_preview, viewer
-    if viewer.is_open() or image_preview.is_open():
+    from . import image_preview, video_preview, viewer
+    if viewer.is_open() or image_preview.is_open() or video_preview.is_open():
         return
     hit = _hit(_double)
     if hit:
@@ -92,7 +92,7 @@ def _dispatch_double(sender, app_data):
 
 def _dispatch(sender, app_data):
     """Fire the callback of the smallest registered card under the cursor."""
-    from . import folders, image_preview, viewer
+    from . import folders, image_preview, video_preview, viewer
     x, y = dpg.get_mouse_pos(local=False)
     if viewer.is_open():
         # The preview is on top; a click outside it closes it and stops there.
@@ -102,6 +102,10 @@ def _dispatch(sender, app_data):
     if image_preview.is_open():
         if image_preview.click_outside(x, y):
             image_preview.hide()
+        return
+    if video_preview.is_open():
+        if video_preview.click_outside(x, y):
+            video_preview.hide()
         return
     if folders.is_open() and folders.click_outside(x, y):
         folders.hide()

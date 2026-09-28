@@ -8,7 +8,8 @@ import datetime
 import os
 import dearpygui.dearpygui as dpg
 
-from .. import actions, data, db, image_preview, layout, theme as th, uploads, widgets as w
+from .. import (actions, data, db, image_preview, layout, theme as th, uploads,
+                video_preview, widgets as w)
 
 TITLE = "New case"
 CRUMB = ("New case", "Details")
@@ -311,7 +312,7 @@ def _file_thumb(index, entry, width):
         from .. import state
         path = entry["path"]
         if uploads.is_video(path):
-            state.on_double_click(tile, lambda s, a, u: actions.open_external(path))
+            state.on_double_click(tile, lambda s, a, u: video_preview.open_video_preview(path))
         elif os.path.splitext(path)[1].lower() in (".jpg", ".jpeg", ".png"):
             state.on_double_click(tile, lambda s, a, u: image_preview.show(path))
 

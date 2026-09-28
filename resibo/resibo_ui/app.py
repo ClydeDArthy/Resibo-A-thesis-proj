@@ -7,7 +7,8 @@ workspace with the nav rail and the stage screens.
 import dearpygui.dearpygui as dpg
 
 from . import (actions, data, db, folders, icons, image_preview, layout, player,
-               scrim, settings, splash, state, theme as th, viewer, widgets as w)
+               scrim, settings, splash, state, theme as th, video_preview, viewer,
+               widgets as w)
 from .screens import (picker, newcase, progress, evidence, working_copy,
                       clips, people, faces, walking, history)
 
@@ -93,6 +94,7 @@ def back_to_cases(sender=None, app_data=None, user_data=None):
     """Return to the case picker."""
     viewer.hide()
     image_preview.hide()
+    video_preview.hide()
     folders.hide()
     scrim.hide()
     dpg.configure_item("workspace", show=False)
@@ -283,9 +285,10 @@ def set_theme(name):
     # Themes are baked into every item, so the interface is rebuilt.
     viewer.hide()
     image_preview.hide()
+    video_preview.hide()
     folders.hide()
     scrim.hide()
-    for tag in ("viewer", "image_preview", "folder_win",
+    for tag in ("viewer", "image_preview", "video_preview", "folder_win",
                 "confirm_delete", "dlg_export", "ev_remove_confirm", "scrim"):
         if dpg.does_item_exist(tag):
             dpg.delete_item(tag)
@@ -297,6 +300,7 @@ def set_theme(name):
     evidence.build_dialog()
     viewer.build()
     image_preview.build()
+    video_preview.build()
     folders.build()
 
     dpg.push_container_stack("primary")
@@ -324,6 +328,7 @@ def run():
     evidence.build_dialog()
     viewer.build()
     image_preview.build()
+    video_preview.build()
     folders.build()
     history.install_clock()
     progress.set_opener(_select)
@@ -353,6 +358,9 @@ def run():
         if SCREENS[_current] is history and dpg.get_item_configuration("workspace")["show"]:
             history.tick()
         player.tick()
+        video_preview.tick()
         actions.tick()
         dpg.render_dearpygui_frame()
+    video_preview.hide()
+    video_preview.cleanup()
     dpg.destroy_context()

@@ -1,7 +1,8 @@
 """Clips received: segments carved from the source footage, each hashed on arrival."""
 
 import dearpygui.dearpygui as dpg
-from .. import actions, data, db, layout, player, state, theme as th, uploads, video, widgets as w
+from .. import (data, db, layout, player, state, theme as th, uploads, video,
+                video_preview, widgets as w)
 
 TITLE = "Clips"
 CRUMB = ("CASE-2026-09A", "Clips received")
@@ -97,7 +98,7 @@ def _fill_main():
         if not dl:
             w.video_frame(art, 210, "", "")
         else:
-            state.on_click(dl, lambda s, a, u: actions.open_external(path))
+            state.on_click(dl, lambda s, a, u: video_preview.open_video_preview(path))
         w.spacer(8)
         player.bar(clip["at"], clip["total"], progress=0.36, width=art)
     dpg.bind_item_theme(box, th.T["card"])
