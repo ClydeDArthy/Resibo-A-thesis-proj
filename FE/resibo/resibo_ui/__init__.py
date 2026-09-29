@@ -1,1 +1,0 @@
-"""RESIBO front-end package."""
