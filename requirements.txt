@@ -1,0 +1,5 @@
+dearpygui>=2.0
+opencv-python-headless>=4.8
+sounddevice>=0.5
+soundfile>=0.12
+imageio-ffmpeg>=0.4
