@@ -12,9 +12,9 @@ python main.py
 | Path | Purpose |
 | --- | --- |
 | `main.py` | Entry point — launches the [resibo](resibo/) front-end |
-| `resibo/` | Front-end prototype (Dear PyGui) — see [resibo/README.md](resibo/README.md) |
-| `FE/` | Face enhancement |
-| `FR/` | Face recognition |
+| `resibo/` |fusion component |
+| `FE/`  Front-end prototype (Dear PyGui) — see [resibo/README.md](resibo/README.md) |
+| `FR/` | Face recognition &  Face enhancement |
 | `Gait/` | Gait recognition |
 | `df/` | Deepfake detection |
 | `obj/` | Object/person detection |
