@@ -52,6 +52,13 @@ def _face(cx, cy, col):
     dpg.draw_line((cx - 3, cy + 3), (cx + 3, cy + 3), color=col, thickness=1.2)
 
 
+def _face_video(cx, cy, col):
+    """Face module: a face inside a video frame."""
+    dpg.draw_rectangle((cx - 8, cy - 7), (cx + 8, cy + 7), color=col, thickness=1.2)
+    dpg.draw_circle((cx, cy - 1), 3, color=col, thickness=1.2)
+    dpg.draw_line((cx - 4, cy + 5), (cx + 4, cy + 5), color=col, thickness=1.2)
+
+
 def _wave(cx, cy, col):
     """Gait: the ankle-height trace."""
     points = [(cx - 8, cy), (cx - 5, cy - 5), (cx - 2, cy + 4),
@@ -75,7 +82,7 @@ def _chain(cx, cy, col):
 
 
 # One drawing function per screen, in nav order.
-GLYPHS = [_grid, _document, _copy, _film, _person, _face, _steps, _chain]
+GLYPHS = [_grid, _document, _copy, _film, _person, _face, _face_video, _steps, _chain]
 
 
 def draw(drawlist, index, active):

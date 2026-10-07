@@ -44,6 +44,7 @@ _audio_cache = {}        # path -> extracted wav path, or None if it has no audi
 _session = {
     "path": None, "thread": None, "stop": None, "pause": None, "queue": None,
     "texture": None, "tex_w": 0, "tex_h": 0, "finished": False, "audio": None,
+    "subtitle": "", "start": 0.0, "end": 1.0,
 }
 
 
@@ -149,9 +150,12 @@ def _start_audio(wav_path, play_start):
 
 
 class _Reader(threading.Thread):
-    def __init__(self, path, frame_q, stop_event, pause_event):
+    def __init__(self, path, frame_q, stop_event, pause_event, start=0.0, end=1.0):
         super().__init__(daemon=True)
         self.path = path
+        self.start_at = start
+        self.end_at = end
+        self.offset = 0.0
         self.frame_q = frame_q
         self.stop_event = stop_event
         self.pause_event = pause_event      # set() == playing
@@ -166,6 +170,14 @@ class _Reader(threading.Thread):
                 return
             fps = capture.get(cv2.CAP_PROP_FPS) or 25.0
             interval = 1.0 / fps if fps > 1 else 1.0 / 25.0
+            total = int(capture.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+            first = 0
+            if self.start_at > 0 and total > 1:
+                first = int(total * min(0.99, self.start_at))
+                capture.set(cv2.CAP_PROP_POS_FRAMES, first)
+                self.offset = first / fps
+            last = int(total * self.end_at) if total > 1 and self.end_at < 1.0 else None
+            position = first
 
             ok, frame = capture.read()
             if not ok or frame is None:
@@ -192,7 +204,8 @@ class _Reader(threading.Thread):
                     time.sleep(min(0.01, next_due - now))
                     continue
                 ok, frame = capture.read()
-                if not ok or frame is None:
+                position += 1
+                if not ok or frame is None or (last is not None and position > last):
                     self._post("done", None)
                     break
                 if not self._post("frame", _to_texture_data(frame)):
@@ -204,7 +217,7 @@ class _Reader(threading.Thread):
     def _load_audio(self):
         wav_path = _extract_audio(self.path, self.stop_event)
         if wav_path and not self.stop_event.is_set():
-            self._post("audio", (wav_path, self.play_start))
+            self._post("audio", (wav_path, self.play_start - self.offset))
 
     def _post(self, kind, payload):
         """Retries on a full queue; gives up once stop_event is set."""
@@ -238,14 +251,17 @@ def build():
     dpg.bind_item_theme(win, th.T["panel"])
 
 
-def open_video_preview(path):
+def open_video_preview(path, subtitle="", start=0.0, end=1.0):
+    """Play `path` in the preview window, optionally from a fraction of its
+    length to another, with a caption along the bottom of the frame."""
     if not path or not os.path.isfile(path):
         return
     _stop_reader()
     dpg.set_value("vidprev_title", os.path.basename(path))
     dpg.configure_item("vidprev_toggle", label="Pause", enabled=cv2 is not None)
     dpg.delete_item("vidprev_art", children_only=True)
-    _session.update(path=path, texture=None, tex_w=0, tex_h=0, finished=False)
+    _session.update(path=path, texture=None, tex_w=0, tex_h=0, finished=False,
+                    subtitle=subtitle, start=start, end=end)
 
     if cv2 is None:
         w.font(dpg.add_text("OpenCV is not installed - can't play video here.",
@@ -255,7 +271,7 @@ def open_video_preview(path):
         pause_event = threading.Event()
         pause_event.set()
         frame_q = queue.Queue(maxsize=3)
-        reader = _Reader(path, frame_q, stop_event, pause_event)
+        reader = _Reader(path, frame_q, stop_event, pause_event, start, end)
         _session.update(thread=reader, stop=stop_event, pause=pause_event, queue=frame_q)
         reader.start()
 
@@ -356,12 +372,15 @@ def _draw_frame(tag, tex_w, tex_h):
     dpg.delete_item("vidprev_art", children_only=True)
     dpg.push_container_stack("vidprev_art")
     dpg.draw_image(tag, (left, top), (left + draw_w, top + draw_h))
+    if _session["subtitle"]:
+        w.draw_subtitle(_session["subtitle"], left, top + draw_h, draw_w)
     dpg.pop_container_stack()
 
 
 def _toggle(sender=None, app_data=None, user_data=None):
     if _session["finished"]:
-        open_video_preview(_session["path"])
+        open_video_preview(_session["path"], _session["subtitle"], _session["start"],
+                           _session["end"])
         return
     pause_event = _session["pause"]
     if pause_event is None:

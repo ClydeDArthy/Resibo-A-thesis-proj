@@ -38,18 +38,6 @@ def _checks():
     """Centre column: hash comparison and the technical read of the video."""
     with dpg.child_window(width=-430, border=True) as pane:
         layout.register(pane, "centre")
-        with dpg.table_row(parent=w.header_row(70)):
-            with dpg.group():
-                w.title("Working copy", "h1")
-                w.mono("The original stays untouched. Work happens on a copy.", "dim")
-            with dpg.group():
-                w.text("Hashes", "dim", "ui_sm")
-                w.text("match", "green", "mono")
-
-        w.spacer(10)
-        dpg.add_separator()
-        w.spacer(14)
-
         w.title("Hash check")
         w.spacer(8)
         rows = [(name, (h, "dim"), result) for name, h, result in data.COPY_HASHES]

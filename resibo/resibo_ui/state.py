@@ -18,6 +18,7 @@ SEL = {
     "folder": None,    # Person detection - open identity folder
     "face_step": 2,    # Faces - which face stage
     "face_person": 1,  # Faces - which saved person
+    "face_module": 0,  # Face module - which detected person
     "gait": 1,         # Gait - which person
     "walk": 1,         # Walking - which person
     "stage": -1,       # History - stage filter (-1 = show the whole chain)

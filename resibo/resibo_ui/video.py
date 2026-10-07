@@ -13,6 +13,33 @@ except ImportError:
     cv2 = None
 
 _textures = {}          # (path, fraction) -> (texture_tag, width, height)
+_durations = {}
+
+
+def sealed_path(case_number):
+    """The first real video file sealed for this case, if any."""
+    from . import db, uploads
+    for row in db.evidence_for(case_number):
+        if uploads.is_video(row["path"]):
+            return row["path"]
+    return None
+
+
+def duration(path):
+    """Length of a video in seconds, or 0 if it can't be read."""
+    if path in _durations:
+        return _durations[path]
+    seconds = 0.0
+    if cv2 is not None and path and os.path.isfile(path):
+        capture = cv2.VideoCapture(path)
+        try:
+            fps = capture.get(cv2.CAP_PROP_FPS) or 0
+            frames = capture.get(cv2.CAP_PROP_FRAME_COUNT) or 0
+            seconds = frames / fps if fps > 0 else 0.0
+        finally:
+            capture.release()
+    _durations[path] = seconds
+    return seconds
 
 
 def frame_texture(path, at_fraction=0.0):
@@ -50,16 +77,18 @@ def frame_texture(path, at_fraction=0.0):
     return _textures[key]
 
 
-def draw(width, height, path, at_fraction=0.0, play_badge=False):
+def draw(width, height, path, at_fraction=0.0, play_badge=False, subtitle=""):
     """Draw a real frame into a `width` x `height` drawlist; the drawlist's
     item id if it drew one (so the caller can make it clickable), else None."""
     tex = frame_texture(path, at_fraction)
     if not tex:
         return None
     tag, _src_w, _src_h = tex
+    from . import widgets
     with dpg.drawlist(width=width, height=height) as dl:
         dpg.draw_image(tag, (0, 0), (width, height))
         if play_badge:
-            from . import widgets
             widgets._draw_play_badge(width / 2, height / 2, r=28)
+        if subtitle:
+            widgets.draw_subtitle(subtitle, 0, height, width)
     return dl

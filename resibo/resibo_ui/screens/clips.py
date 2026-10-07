@@ -1,7 +1,7 @@
 """Clips received: segments carved from the source footage, each hashed on arrival."""
 
 import dearpygui.dearpygui as dpg
-from .. import (data, db, layout, player, state, theme as th, uploads, video,
+from .. import (data, layout, player, state, theme as th, video,
                 video_preview, widgets as w)
 
 TITLE = "Clips"
@@ -54,6 +54,33 @@ def _fill_list():
         w.spacer(2)
 
 
+def _span(clip, path):
+    """The clip's start and end as fractions of the sealed video's length."""
+    total = video.duration(path)
+    parts = [p.strip() for p in clip["span"].split("-")]
+    if total <= 0 or len(parts) != 2:
+        return 0.0, 1.0
+    start, end = (player._seconds(p) / total for p in parts)
+    if start >= 1.0:
+        return 0.0, 1.0
+    return start, min(1.0, max(end, start))
+
+
+def _play(index):
+    path = video.sealed_path(data.CASES[state.SEL["case"]]["number"])
+    if not path:
+        return
+    clip = data.CLIPS[index]
+    start, end = _span(clip, path)
+    video_preview.open_video_preview(path, "{} . {}".format(clip["id"], clip["span"]),
+                                     start, end)
+
+
+def _open_row(sender, app_data, index):
+    _pick(sender, app_data, index)
+    _play(index)
+
+
 def _preview():
     """Centre column: the selected clip plus the hash table for all clips."""
     with dpg.child_window(width=-1, border=True) as pane:
@@ -63,23 +90,10 @@ def _preview():
     dpg.bind_item_theme(pane, th.T["pane"])
 
 
-def _sealed_video_path(case_number):
-    """The first real video file sealed for this case, if any."""
-    for row in db.evidence_for(case_number):
-        if uploads.is_video(row["path"]):
-            return row["path"]
-    return None
-
-
 def _fill_main():
     index = state.SEL["clip"]
     clip = data.CLIPS[index]
     case_number = data.CASES[state.SEL["case"]]["number"]
-
-    w.title("Clips received", "h1")
-    w.spacer(8)
-    dpg.add_separator()
-    w.spacer(14)
 
     w.text(clip["id"] + " preview", "text", "ui")
     w.spacer(8)
@@ -93,19 +107,23 @@ def _fill_main():
         # real sealed video if this case actually has one, otherwise the
         # illustrated placeholder.
         art = layout.content_width(has_right=False)
-        path = _sealed_video_path(case_number)
-        dl = path and video.draw(art, 210, path, at_fraction=0.36, play_badge=True)
+        path = video.sealed_path(case_number)
+        at = _span(clip, path)[0] if path else 0.0
+        dl = path and video.draw(art, 210, path, at_fraction=at, play_badge=True)
         if not dl:
             w.video_frame(art, 210, "", "")
         else:
-            state.on_click(dl, lambda s, a, u: video_preview.open_video_preview(path))
+            state.on_click(dl, lambda s, a, u: _play(index))
         w.spacer(8)
         player.bar(clip["at"], clip["total"], progress=0.36, width=art)
     dpg.bind_item_theme(box, th.T["card"])
 
     w.spacer(16)
+    w.mono("click a clip to play it", "faint", small=True)
+    w.spacer(6)
     rows = [(c["id"], c["span"], c["length"], (c["hash"], "dim"), ("", "green", True))
             for c in data.CLIPS]
     w.table(["Clip", "Time in the original", "Length", "Hash", ""],
-            rows, weights=[1, 1.4, 0.8, 1.6, 0.2], highlight=index)
+            rows, weights=[1, 1.4, 0.8, 1.6, 0.2], highlight=index,
+            on_select=_open_row)
 

@@ -55,10 +55,6 @@ def _tiles():
     with dpg.child_window(width=-450, border=True) as pane:
         layout.register(pane, "centre")
         layout.on_resize(lambda: state.rebuild("fc_tiles", _fill_tiles))
-        w.title("Face enhancement", "h1")
-        w.spacer(8)
-        dpg.add_separator()
-        w.spacer(14)
         with dpg.group(tag="fc_tiles"):
             _fill_tiles()
     dpg.bind_item_theme(pane, th.T["pane"])

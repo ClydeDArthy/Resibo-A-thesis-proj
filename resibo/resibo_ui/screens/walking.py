@@ -6,6 +6,7 @@ from .. import data, layout, state, theme as th, widgets as w, widgets_plot as w
 TITLE = "Walking"
 CRUMB = ("CASE-2026-09A", "Walking")
 ACTION = None
+HIDDEN_STAGES = {"Body points", "Walk cycles", "Walk pattern"}
 
 
 def build():
@@ -16,7 +17,7 @@ def build():
 
 
 def _pick(sender, app_data, index):
-    """Select a person; the stages, table and detail panel follow."""
+    """Select a person; the table and detail panel follow."""
     state.SEL["walk"] = index
     state.rebuild("wk_list", _fill_list)
     state.rebuild("wk_main", _fill_main)
@@ -58,20 +59,8 @@ def _analysis():
 def _fill_main():
     index = state.SEL["walk"]
     person = data.WALK_RESULTS[index][0]
-    usable = sum(1 for r in data.WALK_RESULTS if r[2] in ("Usable", "Caution"))
 
-    with dpg.table_row(parent=w.header_row(70)):
-        with dpg.group():
-            w.title("Walking analysis", "h1")
-            w.mono("Runs on the person box folders, separately from the face side.", "dim")
-        with dpg.group():
-            w.text("Usable", "dim", "ui_sm")
-            w.text("{} of {}".format(usable, len(data.WALK_RESULTS)), "green", "mono")
-    w.spacer(10)
-    dpg.add_separator()
-    w.spacer(14)
-
-    w.section("Person folders", "the same folders saved during tracking")
+    w.section("Person folders")
     def draw(i):
         name, sub, tone = data.PERSON_FOLDERS[i]
         tile = w.folder_tile(data.identity_for(name), sub, tone, height=100,
@@ -86,9 +75,9 @@ def _fill_main():
     stage_w = w.share(layout.content_width(has_right=True), len(data.WALK_STAGES))
     with dpg.group(horizontal=True):
         for letter, caption, sub in data.WALK_STAGES:
-            w.face_tile(caption, sub, width=stage_w, height=196,
-                        blurred=(letter in "ab"), selected=(letter == "e"),
-                        letter=letter, landmarks=(letter == "c"))
+            if caption not in HIDDEN_STAGES:
+                w.face_tile(caption, sub, width=stage_w, height=196,
+                            blurred=True, letter=letter)
 
     w.spacer(16)
     w.section("Walking results", "one cycle = heel down to heel down again")

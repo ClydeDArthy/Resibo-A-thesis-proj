@@ -186,7 +186,8 @@ def header_row(right_width=1, col_tag=None):
 
 def stat_box(label, value, tone="text", sub="", width=-1, big=True):
     """Metric tile: small grey label, large value, optional caption."""
-    with dpg.child_window(width=width, height=96, border=True, no_scrollbar=True, no_scroll_with_mouse=True) as box:
+    height = 96 + (22 if sub else 0)
+    with dpg.child_window(width=width, height=height, border=True, no_scrollbar=True, no_scroll_with_mouse=True) as box:
         text(label, "dim", "ui_sm")
         spacer(2)
         text(str(value), tone, "mono_big" if big else "h2")
@@ -315,6 +316,9 @@ def video_frame(width, height, cam_label, time_label, boxes=(), corner="", looks
 
 def center_text(value, width, color="text", fnt="ui_sm", char=7.0):
     """Draw text centred in a column of `width` pixels."""
+    if len(value) * char > width:
+        text(value, color, fnt, wrap=width)
+        return
     with dpg.group(horizontal=True):
         pad = int((width - len(value) * char) / 2)
         if pad > 2:
@@ -327,7 +331,7 @@ def face_tile(caption, sub, width=195, height=200, blurred=False, selected=False
     """Face-analysis thumbnail: the example portrait plus its caption."""
     # Reserve room for the caption (and sub) so neither is clipped. A centred
     # line sits in its own group, which costs about 28 px including spacing.
-    sub_lines = 1 if sub else 0
+    sub_lines = -(-int(len(sub) * 7.2) // max(1, width - 20)) if sub else 0
     art_h = max(60, height - 56 - sub_lines * 26)
     with dpg.child_window(width=width, height=height, border=True, no_scrollbar=True, no_scroll_with_mouse=True) as tile:
         w = width - 20
@@ -367,11 +371,11 @@ def face_tile(caption, sub, width=195, height=200, blurred=False, selected=False
         if centered:
             center_text(caption, w)
             if sub:
-                center_text(sub, w, "faint", "mono_sm", char=6.4)
+                center_text(sub, w, "faint", "mono_sm", char=7.2)
         else:
             text(caption, "text", "ui_sm", wrap=-1)
             if sub:
-                text(sub, "faint", "mono_sm", wrap=-1)
+                text(sub, "faint", "mono_sm", wrap=w)
     dpg.bind_item_theme(tile, th.T["card_sel"] if selected else th.T["card"])
     return tile
 
@@ -439,6 +443,15 @@ def _draw_play_badge(cx, cy, r=18):
     tw, tall = r * 0.7, r * 0.8
     dpg.draw_triangle((cx - tw * 0.30, cy - tall / 2), (cx - tw * 0.30, cy + tall / 2),
                       (cx + tw * 0.65, cy), fill=(255, 255, 255, 235), color=(255, 255, 255, 235))
+
+
+def draw_subtitle(value, left, bottom, width, size=16):
+    """A centred caption on a dark band along the bottom edge of a frame."""
+    band = size + 14
+    dpg.draw_rectangle((left, bottom - band), (left + width, bottom),
+                       fill=(0, 0, 0, 170), color=(0, 0, 0, 0))
+    dpg.draw_text((left + (width - len(value) * size * 0.55) / 2, bottom - band + 6),
+                  value, size=size, color=(255, 255, 255, 240))
 
 
 def evidence_thumb(path, name, width=160, note="", selected=False,

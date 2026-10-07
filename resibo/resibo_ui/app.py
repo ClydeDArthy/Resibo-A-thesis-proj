@@ -10,10 +10,12 @@ from . import (actions, data, db, folders, icons, image_preview, layout, player,
                scrim, settings, splash, state, theme as th, video_preview, viewer,
                widgets as w)
 from .screens import (picker, newcase, progress, evidence, working_copy,
-                      clips, people, faces, walking, history)
+                      clips, people, faces, face_module, walking,
+                      history)
 
 # Workspace screens, in nav-rail order. Progress is the case home.
-SCREENS = [progress, evidence, working_copy, clips, people, faces, walking, history]
+SCREENS = [progress, evidence, working_copy, clips, people, faces, face_module,
+           walking, history]
 
 VIEWPORT_W, VIEWPORT_H = 1500, 940
 _nav_icons = []
@@ -70,6 +72,7 @@ def open_case(index):
     progress.refresh()
     evidence.refresh()
     clips.refresh()
+    face_module.refresh()
     history.refresh()
     _select(0)
     actions.toast("Opened " + data.CASES[index]["number"])
@@ -152,7 +155,7 @@ def _cancel_delete(sender=None, app_data=None, user_data=None):
     dpg.configure_item("confirm_delete", show=False)
 
 
-CONFIRM_W, CONFIRM_H = 460, 230
+CONFIRM_W, CONFIRM_H = 460, 260
 
 
 def _confirm_dialog():

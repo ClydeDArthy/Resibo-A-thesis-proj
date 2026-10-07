@@ -115,11 +115,6 @@ def _records():
     """Centre column: live chain counters and the record log."""
     with dpg.child_window(width=-420, border=True) as pane:
         layout.register(pane, "centre")
-        w.title("History", "h1")
-        w.mono("Every step is logged and locked to the step before it.", "dim")
-        w.spacer(10)
-        dpg.add_separator()
-        w.spacer(14)
         with dpg.group(tag="hs_records"):
             _fill_records()
     dpg.bind_item_theme(pane, th.T["pane"])
