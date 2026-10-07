@@ -82,22 +82,23 @@ def _step_card(index, step, badge, tone, case):
 
     with dpg.child_window(auto_resize_y=True, border=True, no_scrollbar=True,
                           no_scroll_with_mouse=True) as card:
-        with dpg.table_row(parent=w.header_row(w.pill_width(badge))):
-            with dpg.group(horizontal=True):
-                with dpg.drawlist(width=36, height=38):
-                    col = th.GREEN if tone == "green" else th.AMBER if tone == "amber" \
-                        else th.BLUE if tone == "blue" else th.TEXT_FAINT
-                    dpg.draw_circle((17, 19), 13, color=col, thickness=1.2)
-                    dpg.draw_text((13, 11), str(index + 1), size=14, color=col)
+        with dpg.group() as header:
+            with dpg.table_row(parent=w.header_row(w.pill_width(badge))):
+                with dpg.group(horizontal=True):
+                    with dpg.drawlist(width=36, height=38):
+                        col = th.GREEN if tone == "green" else th.AMBER if tone == "amber" \
+                            else th.BLUE if tone == "blue" else th.TEXT_FAINT
+                        dpg.draw_circle((17, 19), 13, color=col, thickness=1.2)
+                        dpg.draw_text((13, 11), str(index + 1), size=14, color=col)
+                    with dpg.group():
+                        with dpg.group(horizontal=True):
+                            w.text("v" if open_now else ">", "green" if open_now else "faint",
+                                   "mono", wrap=-1)
+                            w.text(step["label"], "text" if started else "dim", "ui", wrap=-1)
+                        w.text(step["note"], "faint", "mono_sm", wrap=-1)
                 with dpg.group():
-                    with dpg.group(horizontal=True):
-                        w.text("v" if open_now else ">", "green" if open_now else "faint",
-                               "mono", wrap=-1)
-                        w.text(step["label"], "text" if started else "dim", "ui", wrap=-1)
-                    w.text(step["note"], "faint", "mono_sm", wrap=-1)
-            with dpg.group():
-                w.spacer(4)
-                w.pill(badge, tone)
+                    w.spacer(4)
+                    w.pill(badge, tone)
 
         if open_now:
             w.spacer(6)
@@ -123,7 +124,9 @@ def _step_card(index, step, badge, tone, case):
                 dpg.bind_item_theme(btn, th.T["btn_primary"] if started else th.T["btn_ghost"])
 
     dpg.bind_item_theme(card, th.T["card_sel"] if open_now else th.T["card"])
-    state.on_click(card, _toggle, index)
+    # Only the header toggles the card - the whole card would also swallow
+    # clicks meant for the "Open ... >" button nested below it.
+    state.on_click(header, _toggle, index)
 
 
 def _details():
