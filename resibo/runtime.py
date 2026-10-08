@@ -40,7 +40,7 @@ class ResiboRuntime:
         self.silhouette_extractor = silhouette_extractor
         self.gait_scorer = gait_scorer
         self.gait_stage = gait_stage
-        self.tracks: Dict[int, RuntimeTrackState] = {}
+        self.tracks: Dict[int, RuntimeTrackState] = {}\n        self.gait_results: Dict[int, object] = {}
 
     def _state(self, master_id: int) -> RuntimeTrackState:
         return self.tracks.setdefault(master_id, RuntimeTrackState())
