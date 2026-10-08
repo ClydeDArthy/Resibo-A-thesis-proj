@@ -1,8 +1,27 @@
 """Live face detection boundary used by the FE runtime."""
 import os
 import importlib
+from pathlib import Path
 
 import numpy as np
+
+def _discover_face_weights(explicit=None):
+    candidates = []
+    if explicit:
+        candidates.append(Path(str(explicit)))
+    env = os.getenv("RESIBO_FACE_WEIGHTS")
+    if env:
+        candidates.append(Path(env))
+    for name in ("yolov11s-face.pt", "yolov11n-face.pt", "yolov11m-face.pt"):
+        candidates.extend([
+            Path(name),
+            Path("models") / name,
+            Path("workspace") / "models" / name,
+        ])
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate
+    return candidates[0] if candidates else Path("yolov11s-face.pt")
 
 
 def _load_callable(spec):
@@ -15,7 +34,7 @@ def _load_callable(spec):
 class FaceRuntime:
     def __init__(self, fr_store=None, weights=None, processor=None):
         self.fr_store = fr_store
-        self.weights = str(weights or os.getenv("RESIBO_FACE_WEIGHTS", "yolov11s-face.pt"))
+        self.weights = str(_discover_face_weights(weights))
         self.model = None
         self.processor = processor or _load_callable(os.getenv('RESIBO_FACE_PROCESSOR'))
         self.error = None
