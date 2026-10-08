@@ -22,6 +22,13 @@ def build():
         _persons()
 
 
+def refresh_live():
+    if dpg.does_item_exist("fc_tiles"):
+        state.rebuild("fc_tiles", _fill_tiles)
+    if dpg.does_item_exist("fc_persons"):
+        state.rebuild("fc_persons", _fill_persons)
+
+
 def _pick_person(sender, app_data, index):
     """Switch the crops shown to another saved identity."""
     state.SEL["face_person"] = index
