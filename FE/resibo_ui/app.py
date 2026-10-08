@@ -6,7 +6,7 @@ workspace with the nav rail and the stage screens.
 
 import dearpygui.dearpygui as dpg
 
-from . import (actions, data, db, folders, icons, image_preview, layout, player,
+from . import (actions, data, db, folders, icons, image_preview, layout, obj_bridge, player,
                scrim, settings, splash, state, theme as th, video_preview, viewer,
                widgets as w)
 from .screens import (picker, newcase, progress, evidence, working_copy,
@@ -42,6 +42,9 @@ def _select(index):
         icons.draw(_nav_icons[i], i, active=(i == index))
 
     active = SCREENS[index]
+    if active is people:
+        obj_bridge.start_for_current_case()
+        people.refresh_backend()
     dpg.set_value("crumb_case", data.CASES[state.SEL["case"]]["number"])
     dpg.set_value("crumb_page", active.CRUMB[1])
 
@@ -360,6 +363,9 @@ def run():
         player.tick()
         video_preview.tick()
         actions.tick()
+        obj_bridge.tick()
+        if SCREENS[_current] is people:
+            people.refresh_backend()
         dpg.render_dearpygui_frame()
     video_preview.hide()
     video_preview.cleanup()
