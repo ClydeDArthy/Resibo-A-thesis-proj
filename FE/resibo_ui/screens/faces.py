@@ -1,106 +1,51 @@
-"""Face enhancement: bounding box, landmarks, standard crop and enhancement.
-
-Each stage keeps its own picture, so the chain from the raw detection to the
-enhanced crop stays visible.
-"""
-
+"""Live face stage UI. It never presents seeded face results as live output."""
 import dearpygui.dearpygui as dpg
-from .. import data, layout, state, theme as th, widgets as w
+from .. import layout, live, state, theme as th, widgets as w
 
-TITLE = "Face enhancement"
-CRUMB = ("CASE-2026-09A", "Face enhancement")
-ACTION = None
-
-PER_ROW = 3
-TILE_H = 210
-
+TITLE="Face enhancement"; CRUMB=("CASE-2026-09A","Face enhancement"); ACTION=None
 
 def build():
     with dpg.group(horizontal=True):
-        _steps()
-        _tiles()
-        _persons()
+        _left()
+        _main()
+        _right()
 
+def refresh_live():
+    for tag, fn in (("fc_main", _fill_main), ("fc_right", _fill_right)):
+        if dpg.does_item_exist(tag): state.rebuild(tag, fn)
 
-def _pick_person(sender, app_data, index):
-    """Switch the crops shown to another saved identity."""
-    state.SEL["face_person"] = index
-    state.rebuild("fc_tiles", _fill_tiles)
-    state.rebuild("fc_persons", _fill_persons)
+def _left():
+    with dpg.child_window(width=300,border=True) as p:
+        w.title("Face pipeline"); w.spacer(8); dpg.add_separator(); w.spacer(10)
+        snap=live.snapshot()
+        for name,key in (("Face detector","face"),("FR / OSDFace + AdaFace","face")):
+            w.kv_row(name, snap["pipelines"].get(key,"idle"), "green" if snap["pipelines"].get(key) in ("ready","running","completed") else "amber")
+        w.spacer(12)
+        w.note("Live source","Face results come from the current OBJ track and the configured face/FR runtime. Seeded reference crops are not shown.","amber",wrap=260)
+    dpg.bind_item_theme(p,th.T["panel"])
 
+def _main():
+    with dpg.child_window(width=-430,border=True) as p:
+        with dpg.group(tag="fc_main"): _fill_main()
+    dpg.bind_item_theme(p,th.T["pane"])
 
-def _steps():
-    """Left rail: the four stages of the face pipeline."""
-    with dpg.child_window(width=350, border=True) as panel:
-        layout.register(panel, "left")
-        w.title("Steps")
-        w.spacer(4)
-        dpg.add_separator()
-        w.spacer(10)
-        # The step list never scrolls; it holds a fixed four cards.
-        with dpg.child_window(tag="fc_list", border=False, width=-1,
-                              no_scrollbar=True, no_scroll_with_mouse=True):
-            _fill_steps()
-    dpg.bind_item_theme(panel, th.T["panel"])
+def _fill_main():
+    snap=live.snapshot()
+    w.title("Live face results","h1"); w.mono("same master_id and frame clock as OBJ","dim"); w.spacer(10)
+    rows=[]
+    for t in snap["tracks"]:
+        f=t.get("face") or {}
+        rows.append(("master_id "+str(t["master_id"]),t.get("frame_index","-"),f.get("detector","waiting"),f.get("faces",0),f.get("candidate") or "-",f.get("score") if f.get("score") is not None else "-"))
+    if rows: w.table(["Track","Frame","Detector","Faces","Candidate","Score"],rows,weights=[1.2,.8,1,0.6,1.4,1])
+    else: w.note("Waiting for face output","Start a case with an accessible video. The live face detector will follow OBJ tracks.","amber",wrap=500)
 
+def _right():
+    with dpg.child_window(width=-1,border=True) as p:
+        with dpg.group(tag="fc_right"): _fill_right()
+    dpg.bind_item_theme(p,th.T["panel"])
 
-def _fill_steps():
-    for name, model, badge, tone, prog in data.FACE_STEPS:
-        w.step_card(name, model, badge, tone, progress=prog)
-        w.spacer(4)
-
-
-def _tiles():
-    """Centre column: one picture per stage."""
-    with dpg.child_window(width=-450, border=True) as pane:
-        layout.register(pane, "centre")
-        layout.on_resize(lambda: state.rebuild("fc_tiles", _fill_tiles))
-        w.title("Face enhancement", "h1")
-        w.spacer(8)
-        dpg.add_separator()
-        w.spacer(14)
-        with dpg.group(tag="fc_tiles"):
-            _fill_tiles()
-    dpg.bind_item_theme(pane, th.T["pane"])
-
-
-def _fill_tiles():
-    identity, _sub, _tone, _person = data.FACE_PERSONS[state.SEL["face_person"]]
-    frame = data.FACE_FRAMES[state.SEL["face_person"]]
-
-    w.text("{} . frame {}".format(identity, frame), "text", "ui", wrap=-1)
-    w.spacer(10)
-
-    tile_w = w.share(layout.content_width(has_right=True), PER_ROW)
-    for i in range(0, len(data.FACE_TILES), PER_ROW):
-        with dpg.group(horizontal=True):
-            for caption, sub, blurred, bbox, landmarks in data.FACE_TILES[i:i + PER_ROW]:
-                w.face_tile(caption, sub, width=tile_w, height=TILE_H,
-                            blurred=blurred, bbox=bbox, landmarks=landmarks,
-                            centered=True)
-        w.spacer(10)
-
-
-
-def _persons():
-    """Right rail: the saved identity folders the crops came from."""
-    with dpg.child_window(width=-1, border=True) as panel:
-        layout.register(panel, "right")
-        w.title("Saved Persons")
-        w.mono("one person each box", "faint", small=True)
-        w.spacer(6)
-        dpg.add_separator()
-        w.spacer(10)
-        with dpg.group(tag="fc_persons"):
-            _fill_persons()
-    dpg.bind_item_theme(panel, th.T["panel"])
-
-
-def _fill_persons():
-    def draw(i):
-        identity, sub, tone, _person = data.FACE_PERSONS[i]
-        tile = w.folder_tile(identity, sub, tone,
-                             selected=(i == state.SEL["face_person"]))
-        state.on_click(tile, _pick_person, i)
-
-    w.tile_grid(len(data.FACE_PERSONS), 2, draw)
+def _fill_right():
+    w.title("Current tracks")
+    for t in live.tracks():
+        f=t.get("face") or {}
+        w.kv_row("master_id "+str(t["master_id"]), f.get("candidate") or "No FR candidate", "green" if f.get("candidate") else "amber")
