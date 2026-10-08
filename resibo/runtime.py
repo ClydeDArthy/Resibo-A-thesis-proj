@@ -46,6 +46,16 @@ class ResiboRuntime:
     def _state(self, master_id: int) -> RuntimeTrackState:
         return self.tracks.setdefault(master_id, RuntimeTrackState())
 
+    def update_face_observation(
+        self,
+        observation: BiometricObservation,
+    ) -> BiometricObservation:
+        if observation.modality != "face":
+            raise ValueError("face observation must have modality='face'")
+        state = self._state(observation.master_id)
+        state.face = observation
+        return observation
+
     def update_face(self, master_id: int, quality: float = 1.0) -> Optional[BiometricObservation]:
         if self.fr_store is None:
             return None
@@ -92,6 +102,7 @@ class ResiboRuntime:
             return self.update_track(master_id, person_crop, face_quality=face_quality)
 
         gait_result = self.gait_stage.update_silhouette(master_id, frame_index, silhouette)
+        self.gait_results[master_id] = gait_result
         if getattr(gait_result, "status", None) != "inferred":
             return self.update_track(master_id, person_crop, face_quality=face_quality)
 
