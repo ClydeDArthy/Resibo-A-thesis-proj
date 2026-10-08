@@ -120,7 +120,7 @@ def _worker(source, case_number, generation):
         runner = ObjectRunner(pipeline)
 
         live.set_pipeline("obj", "starting")
-        live.set_pipeline("face", "ready" if face_runtime.detector_ready else "waiting", face_runtime.error)
+        live.set_pipeline("face", "ready" if face_runtime.detector_ready else "waiting", face_runtime.error or (None if face_runtime.detector_ready else "Face detector checkpoint not configured."))
         if gait_backend and silhouette.ready:
             live.set_pipeline("gait", "ready")
         else:
