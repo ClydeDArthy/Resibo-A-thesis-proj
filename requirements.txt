@@ -56,3 +56,17 @@ ultralytics>=8.3
 #    may be supplied for the live gait candidate comparison. Otherwise the
 #    configured gallery scorer is used when its gallery is available.
 # ---------------------------------------------------------------------------
+
+
+# 7) DPG deployment/demo mode
+#    If the real person checkpoint is not present, the FE automatically uses
+#    the deterministic DPG demo runtime. This keeps the complete UI control
+#    flow deployable: video -> master_id -> face -> gait -> RESIBO -> diagnostic.
+#    The UI labels every simulated stage "DEMO MODE"; it does not claim that
+#    OSDFace/AdaFace/GaitBase weights were executed.
+#    Force it with:
+#      RESIBO_DEMO_MODE=1
+#    Disable it with:
+#      RESIBO_DEMO_MODE=0
+#    In "auto" mode (the default), demo mode activates when the YOLO person
+#    checkpoint is not locally available.
