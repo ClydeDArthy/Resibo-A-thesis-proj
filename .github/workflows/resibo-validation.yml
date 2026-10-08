@@ -1,0 +1,42 @@
+name: RESIBO validation
+
+on:
+  push:
+    branches:
+      - main
+      - elle
+      - resibo-final-dev-v2
+      - resibo-final-dev
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install numpy opencv-python-headless pytest
+
+      - name: Compile Python sources
+        run: |
+          python -m compileall -q FE FR Gait obj resibo main.py protocols.py
+
+      - name: Run unit and contract tests
+        run: |
+          pytest -q
+
+      - name: Verify the entry point contract
+        run: |
+          python -c "from pathlib import Path; text=Path('main.py').read_text(); assert 'from FE.resibo_ui.app import run' in text; print('main.py contract OK')"
