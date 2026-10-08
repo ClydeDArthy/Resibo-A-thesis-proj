@@ -14,6 +14,7 @@ _result = None
 _error = None
 _progress = 0.0
 _latest = None
+_gait_results = {}
 
 
 def _case():
@@ -66,13 +67,25 @@ def start_for_current_case():
 
 
 def _worker(source, case_number):
-    global _status, _result, _error, _progress, _latest
+    global _status, _result, _error, _progress, _latest, _gait_results
     try:
         from obj import ObjectConfig, ObjectRunner, ObjectTrackingPipeline
+        from Gait import GaitPipeline
 
         config = ObjectConfig()
         pipeline = ObjectTrackingPipeline(config)
         runner = ObjectRunner(pipeline)
+        gait_pipeline = GaitPipeline()
+        _gait_results = {}
+
+        def gait_module(person_crop, master_id, frame_index):
+            result = gait_pipeline.update(
+                master_id=master_id,
+                frame_index=frame_index,
+                person_crop=person_crop,
+            )
+            _gait_results[master_id] = result
+            return result
 
         output_dir = Path("workspace") / "obj" / case_number / source.stem
 
@@ -81,7 +94,7 @@ def _worker(source, case_number):
             _latest = observation
             _status = "running"
 
-        _result = runner.run(source, output_dir, on_frame=on_frame)
+        _result = runner.run(source, output_dir, gait_module=gait_module, on_frame=on_frame)
         _status = "completed"
         _progress = 1.0
     except Exception as exc:
@@ -109,3 +122,6 @@ def latest_result():
 
 def latest_observation():
     return _latest
+
+def gait_results():
+    return dict(_gait_results)
