@@ -113,6 +113,17 @@ class GaitPipeline:
             )
 
         sequence = np.stack([bucket[frame] for frame in ordered_frames[-self.config.sequence_length:]], axis=0)
+        if not self.gaitbase.ready:
+            return GaitResult(
+                track_id=master_id,
+                status="gaitbase_unconfigured",
+                frame_count=count,
+                diagnostics={
+                    "valid_silhouettes": len(bucket),
+                    "sequence_shape": list(sequence.shape),
+                    "error": "GaitBase backend is not configured.",
+                },
+            )
         embedding: GaitEmbedding = self.gaitbase.infer(sequence, master_id)
         return GaitResult(
             track_id=master_id,
