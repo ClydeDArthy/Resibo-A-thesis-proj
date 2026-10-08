@@ -70,9 +70,7 @@ def open_case(index):
     dpg.configure_item("examiner_block", show=True)
     dpg.configure_item("vault_line", show=True)
     dpg.set_value("examiner_name", data.CASES[index].get("examiner", "-"))
-    progress.refresh()
-    evidence.refresh()
-    clips.refresh()
+    obj_bridge.start_for_current_case()\n    progress.refresh()\n    evidence.refresh()\n    clips.refresh()
     history.refresh()
     _select(0)
     actions.toast("Opened " + data.CASES[index]["number"])
@@ -366,6 +364,12 @@ def run():
         obj_bridge.tick()
         if SCREENS[_current] is people:
             people.refresh_backend()
+        elif SCREENS[_current] is faces:
+            faces.refresh_live()
+        elif SCREENS[_current] is walking:
+            walking.refresh_live()
+        elif SCREENS[_current] is progress:
+            progress.refresh_live()
         dpg.render_dearpygui_frame()
     video_preview.hide()
     video_preview.cleanup()
