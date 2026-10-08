@@ -3,10 +3,7 @@ name: RESIBO validation
 on:
   push:
     branches:
-      - main
-      - elle
       - resibo-final-dev-v2
-      - resibo-final-dev
   pull_request:
 
 permissions:
