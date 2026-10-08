@@ -91,11 +91,15 @@ def _worker(source, case_number, generation):
         try:
             gait_backend = load_callable()
             if gait_backend is None:
-                checkpoint = Path(os.getenv(
-                    "RESIBO_GAIT_CHECKPOINT",
-                    "workspace/gait/GaitBase_DA_CCGR_FT-10000.pt",
-                ))
-                if checkpoint.is_file():
+                checkpoint_env = os.getenv("RESIBO_GAIT_CHECKPOINT")
+                candidates = [
+                    Path(checkpoint_env).expanduser() if checkpoint_env else None,
+                    Path("workspace/gait/GaitBase_DA_CCGR_FT-10000.pt"),
+                    Path("OpenGait/output/CCGR-MINI/Baseline/GaitBase_DA_CCGR_FT/checkpoints/GaitBase_DA_CCGR_FT-10000.pt"),
+                    Path("CCGR-Official/output/CCGR-MINI/Baseline/GaitBase_DA_CCGR_FT/checkpoints/GaitBase_DA_CCGR_FT-10000.pt"),
+                ]
+                checkpoint = next((p for p in candidates if p and p.is_file()), None)
+                if checkpoint is not None:
                     from Gait.rebigait_adapter import infer_gaitbase
                     gait_backend = infer_gaitbase
         except Exception as exc:
