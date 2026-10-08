@@ -81,7 +81,7 @@ class DemoGaitScorer:
 
 
 def condition_classifier(sequence, context=None):
-    return {"condition": "occlusion", "confidence": 0.78, "demo": True}
+    return "occlusion"
 
 
 def intervention_builder(sequence, condition, context=None):
