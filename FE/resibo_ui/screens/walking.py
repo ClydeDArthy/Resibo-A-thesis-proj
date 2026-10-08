@@ -1,7 +1,10 @@
-"""Walking: gait analysis run on the person folders, separate from the face side."""
+"""Live gait analysis screen.
 
+The screen follows the same master_id/frame state produced by OBJ and Gait.
+Reference gait tables are never displayed as if they were current model output.
+"""
 import dearpygui.dearpygui as dpg
-from .. import data, layout, live, state, theme as th, widgets as w, widgets_plot as wp
+from .. import layout, live, state, theme as th, widgets as w
 
 TITLE = "Walking"
 CRUMB = ("CASE-2026-09A", "Walking")
@@ -15,38 +18,53 @@ def build():
         _detail()
 
 
+def _results():
+    with dpg.child_window(width=300, border=True) as panel:
+        layout.register(panel, "left")
+        w.title("Live gait results")
+        w.mono("one row per tracked master_id", "faint", small=True)
+        w.spacer(6)
+        dpg.add_separator()
+        w.spacer(10)
+        with dpg.child_window(tag="wk_list", border=False, width=-1,
+                              no_scrollbar=True, no_scroll_with_mouse=True):
+            _fill_list()
+    dpg.bind_item_theme(panel, th.T["panel"])
+
+
+def _fill_list():
+    tracks = live.tracks()
+    if not tracks:
+        w.note(
+            "Waiting",
+            "No tracked person has produced a gait result yet.",
+            "amber",
+            wrap=250,
+        )
+        return
+    for i, track in enumerate(tracks):
+        gait = track.get("gait") or {}
+        status = gait.get("status", "waiting")
+        tone = "green" if status == "inferred" else "amber"
+        item = w.list_item(
+            "master_id {}".format(track["master_id"]),
+            "{} frames".format(gait.get("frame_count", 0)),
+            status,
+            tone,
+            selected=(i == state.SEL["walk"]),
+        )
+        state.on_click(item, _pick, i)
+        w.spacer(2)
+
+
 def _pick(sender, app_data, index):
-    """Select a person; the stages, table and detail panel follow."""
     state.SEL["walk"] = index
     state.rebuild("wk_list", _fill_list)
     state.rebuild("wk_main", _fill_main)
     state.rebuild("wk_detail", _fill_detail)
 
 
-def _results():
-    """Left rail: usability verdict for each person checked."""
-    with dpg.child_window(width=300, border=True) as panel:
-        layout.register(panel, "left")
-        w.title("Results")
-        w.mono("{} people checked".format(len(data.WALK_RESULTS)), "faint", small=True)
-        w.spacer(6)
-        dpg.add_separator()
-        w.spacer(10)
-        with dpg.child_window(tag="wk_list", border=False, width=-1, no_scrollbar=True, no_scroll_with_mouse=True):
-            _fill_list()
-    dpg.bind_item_theme(panel, th.T["panel"])
-
-
-def _fill_list():
-    for i, (name, reason, badge, tone) in enumerate(data.WALK_RESULTS):
-        item = w.list_item(data.identity_for(name), reason, badge, tone,
-                           selected=(i == state.SEL["walk"]))
-        state.on_click(item, _pick, i)
-        w.spacer(2)
-
-
 def _analysis():
-    """Centre column: folders, per-stage images, results table, chart and caveats."""
     with dpg.child_window(width=-390, border=True) as pane:
         layout.register(pane, "centre")
         layout.on_resize(lambda: state.rebuild("wk_main", _fill_main))
@@ -56,55 +74,69 @@ def _analysis():
 
 
 def _fill_main():
-    index = state.SEL["walk"]
-    person = data.WALK_RESULTS[index][0]
-    usable = sum(1 for r in data.WALK_RESULTS if r[2] in ("Usable", "Caution"))
-
-    with dpg.table_row(parent=w.header_row(70)):
+    tracks = live.tracks()
+    status = live.pipeline_status().get("gait", "idle")
+    with dpg.table_row(parent=w.header_row(130)):
         with dpg.group():
             w.title("Walking analysis", "h1")
-            w.mono("Runs on the person box folders, separately from the face side.", "dim")
-        with dpg.group():
-            w.text("Usable", "dim", "ui_sm")
-            w.text("{} of {}".format(usable, len(data.WALK_RESULTS)), "green", "mono")
-    w.spacer(10)
+            w.mono("GaitBase sequence state for the current OBJ tracks.", "dim")
+        w.pill(status, "green" if status in ("ready", "completed") else "amber")
+    w.spacer(12)
     dpg.add_separator()
     w.spacer(14)
 
-    w.section("Person folders", "the same folders saved during tracking")
-    def draw(i):
-        name, sub, tone = data.PERSON_FOLDERS[i]
-        tile = w.folder_tile(data.identity_for(name), sub, tone, height=100,
-                             selected=(name == person))
-        state.on_click(tile, _pick, i)
+    rows = []
+    for track in tracks:
+        gait = track.get("gait") or {}
+        resolution = track.get("resolution")
+        rows.append((
+            "master_id {}".format(track["master_id"]),
+            gait.get("frame_count", 0),
+            gait.get("status", "waiting"),
+            "yes" if gait.get("embedding_ready") else "no",
+            getattr(resolution, "state", "-") if resolution else "-",
+            getattr(resolution, "candidate_id", "-") if resolution else "-",
+        ))
+    if rows:
+        w.table(
+            ["Track", "Frames", "Gait state", "Embedding", "RESIBO", "Candidate"],
+            rows,
+            weights=[1.2, .8, 1.3, 1, 1, 1.4],
+        )
+    else:
+        w.note(
+            "No live gait output",
+            "Gait analysis begins from the person crops emitted by YOLO11 + BoT-SORT.",
+            "amber",
+            wrap=layout.content_width(has_right=True),
+        )
 
-    w.tile_grid(len(data.PERSON_FOLDERS), 4, draw)
-
-    w.spacer(16)
-    w.section(data.identity_for(person) + " - step by step",
-              "each stage keeps its own picture")
-    stage_w = w.share(layout.content_width(has_right=True), len(data.WALK_STAGES))
-    with dpg.group(horizontal=True):
-        for letter, caption, sub in data.WALK_STAGES:
-            w.face_tile(caption, sub, width=stage_w, height=196,
-                        blurred=(letter in "ab"), selected=(letter == "e"),
-                        letter=letter, landmarks=(letter == "c"))
-
-    w.spacer(16)
-    w.section("Walking results", "one cycle = heel down to heel down again")
-    rows = [(data.identity_for(r[0]),) + tuple(r[1:]) for r in data.WALK_TABLE]
-    w.table(["Identity", "Cycles", "Cadence", "Left vs right", "Usable"],
-            rows, weights=[1, 1, 1.1, 1.1, 1.2], highlight=index)
-
-    w.spacer(16)
-    w.section("Where the cycles were found",
-              "ankle height per frame . amber lines are heel down")
-    wp.gait_chart_frame()
-
+    w.spacer(18)
+    w.section("Recognition handoff", "gait output is only passed to RESIBO after GaitBase inference")
+    if not rows:
+        w.mono("Waiting for a tracked sequence.", "faint", small=True)
+    else:
+        for track in tracks:
+            gait = track.get("gait") or {}
+            if gait.get("embedding_ready"):
+                w.mono(
+                    "master_id {} · GaitBase embedding ready · {} frames".format(
+                        track["master_id"], gait.get("frame_count", 0)
+                    ),
+                    "green",
+                    small=True,
+                )
+            else:
+                w.mono(
+                    "master_id {} · {}".format(
+                        track["master_id"], gait.get("status", "waiting")
+                    ),
+                    "amber",
+                    small=True,
+                )
 
 
 def _detail():
-    """Right rail: inputs, measurements and recording conditions for one person."""
     with dpg.child_window(width=-1, border=True) as panel:
         layout.register(panel, "right")
         with dpg.group(tag="wk_detail"):
@@ -113,23 +145,25 @@ def _detail():
 
 
 def _fill_detail():
-    person = data.WALK_RESULTS[state.SEL["walk"]][0]
-    detail = data.WALK_DETAILS[person]
+    tracks = live.tracks()
+    if not tracks:
+        w.title("No live track")
+        return
+    index = min(max(state.SEL["walk"], 0), len(tracks) - 1)
+    track = tracks[index]
+    gait = track.get("gait") or {}
+    resolution = track.get("resolution")
 
-    w.title(data.identity_for(person))
-    w.mono("{} . tracked as {}".format(detail["id"], person), "faint", small=True)
+    w.title("master_id {}".format(track["master_id"]))
+    w.mono("frame {}".format(track.get("frame_index", "-")), "faint", small=True)
     w.spacer(8)
-
-    # Conditions that weaken the result are stated up front.
-    if detail["warn"]:
-        w.text(detail["warn"][0], "amber", "ui", wrap=-1)
-        w.text(detail["warn"][1], "dim", "ui_sm", wrap=layout.widths()[1] - 60)
-        w.spacer(14)
-
-    for group, label in (("input", "Input"), ("measured", "Measured"),
-                         ("conditions", "Conditions")):
-        w.text(label, "text", "ui")
-        w.spacer(6)
-        for key, value, tone in detail[group]:
-            w.kv_row(key, value, tone)
-        w.spacer(10)
+    w.kv_row("Gait state", gait.get("status", "waiting"),
+             "green" if gait.get("status") == "inferred" else "amber")
+    w.kv_row("Frames", gait.get("frame_count", 0), "text")
+    w.kv_row("Embedding", "ready" if gait.get("embedding_ready") else "not ready",
+             "green" if gait.get("embedding_ready") else "amber")
+    if resolution is not None:
+        w.kv_row("RESIBO", resolution.state,
+                 "green" if resolution.state == "resolved" else "amber")
+        w.kv_row("Candidate", resolution.candidate_id or "-", "text")
+        w.kv_row("Fused score", resolution.fused_score if resolution.fused_score is not None else "-", "text")
