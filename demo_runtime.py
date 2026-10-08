@@ -72,7 +72,7 @@ class DemoGaitScorer:
         gallery = rng.normal(size=vector.size).astype(np.float32)
         gallery /= max(np.linalg.norm(gallery), 1e-8)
         sim = float(np.dot(vector, gallery))
-        score = float(np.clip(0.74 + 0.12 * sim, 0.60, 0.92))
+        score = float(np.clip(0.55 + 0.08 * sim, 0.48, 0.62))
         return BiometricObservation(
             master_id=int(master_id), modality="gait",
             candidate_id=target, score=score, quality=0.82,
