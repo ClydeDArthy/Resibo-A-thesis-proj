@@ -1,6 +1,8 @@
 """Small reusable building blocks shared by every RESIBO screen."""
 
 import os
+import cv2
+import numpy as np
 import dearpygui.dearpygui as dpg
 from . import theme as th
 
@@ -270,6 +272,37 @@ def _figure(cx, ground, box_w, box_h, dim=False):
     alpha = 130 if dim else 220
     dpg.draw_image(tex, (cx - box_w / 2, ground - box_h), (cx + box_w / 2, ground),
                    color=(255, 255, 255, alpha))
+
+
+_LIVE_TEXTURE = "resibo_live_frame_texture"
+
+
+def live_video_frame(width, height, frame, cam_label, time_label, boxes=()):
+    """Draw the actual frame emitted by OBJ, with current tracking boxes."""
+    if frame is None or getattr(frame, "size", 0) == 0:
+        return video_frame(width, height, cam_label, time_label, boxes=boxes)
+    rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    rgb = cv2.resize(rgb, (max(1, int(width)), max(1, int(height))))
+    rgba = np.concatenate([rgb, np.full(rgb.shape[:2] + (1,), 255, dtype=np.uint8)], axis=2)
+    data = (rgba.astype(np.float32) / 255.0).ravel()
+    if dpg.does_item_exist(_LIVE_TEXTURE):
+        dpg.set_value(_LIVE_TEXTURE, data)
+    else:
+        with dpg.texture_registry():
+            dpg.add_raw_texture(int(width), int(height), data, format=dpg.mvFormat_Float_rgba,
+                                tag=_LIVE_TEXTURE)
+    with dpg.drawlist(width=width, height=height) as dl:
+        dpg.draw_image(_LIVE_TEXTURE, (0, 0), (width, height))
+        dpg.draw_text((14, 10), cam_label, size=14, color=th.TEXT_DIM)
+        if time_label:
+            dpg.draw_text((width - len(time_label) * 8 - 16, 10), time_label,
+                          size=14, color=th.TEXT_DIM)
+        for fx, fy, fw, fh, label, tone in boxes:
+            x, y, bw, bh = fx * width, fy * height, fw * width, fh * height
+            col = th.GREEN if tone == "green" else th.AMBER
+            dpg.draw_rectangle((x, y), (x + bw, y + bh), color=col, thickness=2)
+            dpg.draw_text((x + 4, max(2, y - 18)), label, size=13, color=col)
+    return dl
 
 
 def video_frame(width, height, cam_label, time_label, boxes=(), corner="", looks=None):
