@@ -73,10 +73,10 @@ class FRCandidateStore:
             query += " AND c.job_id = ?"
             params.append(job_id)
 
-        candidates: list[FaceCandidate] = []
         with self._connect() as db:
             rows = db.execute(query, params).fetchall()
 
+        candidates: list[FaceCandidate] = []
         for row in rows:
             try:
                 metadata = json.loads(row["metadata_json"])
@@ -98,7 +98,9 @@ class FRCandidateStore:
                 )
             )
 
-        candidates.sort(key=lambda item: (item.rank, -item.cosine_similarity, item.input_asset_id))
+        candidates.sort(
+            key=lambda item: (item.rank, -item.cosine_similarity, item.input_asset_id)
+        )
         return candidates
 
     @staticmethod
@@ -116,10 +118,11 @@ class FRCandidateStore:
     def observation_from_candidate(
         self,
         candidate: FaceCandidate,
+        master_id: int,
         quality: float = 1.0,
     ) -> BiometricObservation:
         return BiometricObservation(
-            master_id=int(candidate.track_id) if str(candidate.track_id).isdigit() else -1,
+            master_id=master_id,
             modality="face",
             candidate_id=candidate.candidate_id,
             score=self.cosine_to_unit_score(candidate.cosine_similarity),
