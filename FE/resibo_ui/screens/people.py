@@ -73,6 +73,8 @@ def refresh_backend():
     _last_render_frame = frame_index
     if dpg.does_item_exist("pp_main"):
         state.rebuild("pp_main", _fill_main)
+    if dpg.does_item_exist("pp_steps"):
+        state.rebuild("pp_steps", _fill_steps)
 
 
 def _backend_boxes():
