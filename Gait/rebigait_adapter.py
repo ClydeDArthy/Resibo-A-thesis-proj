@@ -56,21 +56,30 @@ def _load():
 
         import torch
 
-        root = Path(os.getenv("RESIBO_OPENGAIT_ROOT", "OpenGait")).expanduser()
+        root_candidates = [
+            Path(os.getenv("RESIBO_OPENGAIT_ROOT", "OpenGait")).expanduser(),
+            Path("CCGR-Official"),
+            Path("OpenGait"),
+        ]
+        root = next((p for p in root_candidates if p.is_dir()), root_candidates[0])
         if root.is_dir() and str(root.resolve()) not in sys.path:
             sys.path.insert(0, str(root.resolve()))
 
-        checkpoint = Path(
-            os.getenv(
-                "RESIBO_GAIT_CHECKPOINT",
-                "workspace/gait/GaitBase_DA_CCGR_FT-10000.pt",
-            )
-        ).expanduser()
-        if not checkpoint.is_file():
+        checkpoint_candidates = [
+            Path(os.getenv("RESIBO_GAIT_CHECKPOINT", "")).expanduser()
+            if os.getenv("RESIBO_GAIT_CHECKPOINT") else None,
+            Path("workspace/gait/GaitBase_DA_CCGR_FT-10000.pt"),
+            Path("workspace/gait/GaitBase_DA_CCGR_FT-5000.pt"),
+            root / "output/CCGR-MINI/Baseline/GaitBase_DA_CCGR_FT/checkpoints/GaitBase_DA_CCGR_FT-10000.pt",
+            root / "output/CCGR-MINI/Baseline/GaitBase_DA_CCGR_FT/checkpoints/GaitBase_DA_CCGR_FT-5000.pt",
+        ]
+        checkpoint = next((p for p in checkpoint_candidates if p and p.is_file()), None)
+        if checkpoint is None:
             raise FileNotFoundError(
-                "GaitBase checkpoint not found: {}. "
-                "Set RESIBO_GAIT_CHECKPOINT to the GaitBase_DA_CCGR_FT-10000.pt "
-                "produced by rebigait.py.".format(checkpoint)
+                "GaitBase checkpoint not found. Expected the ReBiGait fine-tuned "
+                "GaitBase_DA_CCGR_FT-10000.pt in workspace/gait or the OpenGait "
+                "output/CCGR-MINI/.../checkpoints directory. "
+                "Set RESIBO_GAIT_CHECKPOINT explicitly."
             )
 
         from opengait.modeling.models.baseline import Baseline
