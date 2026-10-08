@@ -17,6 +17,7 @@ _latest = None
 _gait_results = {}
 _face_results = {}
 _resolutions = {}
+_generation = 0
 
 
 def _case():
@@ -38,7 +39,7 @@ def _video_for_case(case):
 
 
 def start_for_current_case():
-    global _thread, _key, _status, _result, _error, _progress
+    global _thread, _key, _status, _result, _error, _progress, _generation
     source = _video_for_case(_case())
     if source is None:
         with _lock:
@@ -51,17 +52,19 @@ def start_for_current_case():
             return True
         if _key == key and _status == "completed":
             return True
+        _generation += 1
+        generation = _generation
         _key, _status, _result, _error, _progress = key, "starting", None, None, 0.0
         _gait_results.clear()
         _face_results.clear()
         _resolutions.clear()
         live.reset()
-        _thread = threading.Thread(target=_worker, args=(source, _case()["number"]), daemon=True)
+        _thread = threading.Thread(target=_worker, args=(source, _case()["number"], generation), daemon=True)
         _thread.start()
     return True
 
 
-def _worker(source, case_number):
+def _worker(source, case_number, generation):
     global _status, _result, _error, _progress, _latest
     try:
         from obj import ObjectConfig, ObjectRunner, ObjectTrackingPipeline
@@ -114,6 +117,8 @@ def _worker(source, case_number):
             live.set_pipeline("obj", "running")
 
             # One frame clock: every tracked person is processed here.
+            if generation != _generation:
+                return
             for person in observation.people:
                 master_id = int(person.master_id)
                 if person.crop is None:
@@ -154,6 +159,8 @@ def _worker(source, case_number):
             if fr_store and getattr(gait_scorer, "ready", False):
                 live.set_pipeline("resibo", "running")
 
+        if generation != _generation:
+            return
         _result = runner.run(source, output_dir, on_frame=on_frame)
         _progress = 1.0
         _status = "completed"
