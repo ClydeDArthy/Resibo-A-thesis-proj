@@ -133,5 +133,4 @@ def _fill_persons():
             badge,
             tone,
         )
-        state.on_click(item, _pick_person, track["master_id"])
         w.spacer(3)
