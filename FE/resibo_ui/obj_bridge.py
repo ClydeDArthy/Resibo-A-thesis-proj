@@ -93,13 +93,16 @@ def _worker(source, case_number):
         from obj import ObjectConfig, ObjectRunner, ObjectTrackingPipeline
         from Gait import GaitConfig, GaitPipeline
         from Gait.gaitbase import GaitBaseAdapter
-        from gait_runtime import load_callable, silhouette_from_person_crop
+        from gait_runtime import GaitGalleryScorer, SegmentationSilhouetteExtractor, load_callable
         from face_runtime import FaceRuntime
         from resibo.runtime import ResiboRuntime
 
         fr_store = _fr_store()
         gait_backend = load_callable()
         gait_scorer = load_callable(os.getenv("RESIBO_GAIT_SCORER"))
+        if gait_scorer is None:
+            gait_scorer = GaitGalleryScorer()
+        silhouette_extractor = SegmentationSilhouetteExtractor()
         gait_pipeline = GaitPipeline(
             GaitConfig(),
             gaitbase=GaitBaseAdapter(gait_backend),
@@ -107,7 +110,7 @@ def _worker(source, case_number):
         face_runtime = FaceRuntime(fr_store=fr_store)
         runtime = ResiboRuntime(
             fr_store=fr_store,
-            silhouette_extractor=silhouette_from_person_crop,
+            silhouette_extractor=silhouette_extractor,
             gait_scorer=gait_scorer,
             gait_stage=gait_pipeline,
         )
@@ -122,7 +125,7 @@ def _worker(source, case_number):
         output_dir = Path("workspace") / "obj" / case_number / source.stem
         live.set_pipeline("obj", "starting")
         live.set_pipeline("face", "ready" if face_runtime.detector_ready else "waiting")
-        live.set_pipeline("gait", "ready" if gait_backend else "waiting")
+        live.set_pipeline("gait", "ready" if gait_backend and silhouette_extractor.ready else "waiting")
         live.set_pipeline("resibo", "ready" if fr_store and gait_scorer else "waiting")
 
         def on_person(person, frame):
