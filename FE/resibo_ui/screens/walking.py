@@ -1,135 +1,55 @@
-"""Walking: gait analysis run on the person folders, separate from the face side."""
-
+"""Live gait and RESIBO state UI."""
 import dearpygui.dearpygui as dpg
-from .. import data, layout, state, theme as th, widgets as w, widgets_plot as wp
+from .. import layout, live, state, theme as th, widgets as w
 
-TITLE = "Walking"
-CRUMB = ("CASE-2026-09A", "Walking")
-ACTION = None
-
+TITLE="Walking"; CRUMB=("CASE-2026-09A","Walking"); ACTION=None
 
 def build():
     with dpg.group(horizontal=True):
-        _results()
-        _analysis()
-        _detail()
+        _left(); _main(); _right()
 
+def refresh_live():
+    for tag,fn in (("wk_main",_fill_main),("wk_right",_fill_right)):
+        if dpg.does_item_exist(tag): state.rebuild(tag,fn)
 
-def _pick(sender, app_data, index):
-    """Select a person; the stages, table and detail panel follow."""
-    state.SEL["walk"] = index
-    state.rebuild("wk_list", _fill_list)
-    state.rebuild("wk_main", _fill_main)
-    state.rebuild("wk_detail", _fill_detail)
+def _left():
+    with dpg.child_window(width=300,border=True) as p:
+        w.title("Live gait")
+        snap=live.snapshot()
+        w.kv_row("Gait stage",snap["pipelines"].get("gait","idle"),"green" if snap["pipelines"].get("gait") in ("ready","running","completed") else "amber")
+        w.kv_row("RESIBO",snap["pipelines"].get("resibo","idle"),"green" if snap["pipelines"].get("resibo") in ("ready","running","completed") else "amber")
+        w.spacer(12)
+        w.note("No fabricated gait","A track remains waiting until a real silhouette and GaitBase embedding are available.","amber",wrap=260)
+    dpg.bind_item_theme(p,th.T["panel"])
 
-
-def _results():
-    """Left rail: usability verdict for each person checked."""
-    with dpg.child_window(width=300, border=True) as panel:
-        layout.register(panel, "left")
-        w.title("Results")
-        w.mono("{} people checked".format(len(data.WALK_RESULTS)), "faint", small=True)
-        w.spacer(6)
-        dpg.add_separator()
-        w.spacer(10)
-        with dpg.child_window(tag="wk_list", border=False, width=-1, no_scrollbar=True, no_scroll_with_mouse=True):
-            _fill_list()
-    dpg.bind_item_theme(panel, th.T["panel"])
-
-
-def _fill_list():
-    for i, (name, reason, badge, tone) in enumerate(data.WALK_RESULTS):
-        item = w.list_item(data.identity_for(name), reason, badge, tone,
-                           selected=(i == state.SEL["walk"]))
-        state.on_click(item, _pick, i)
-        w.spacer(2)
-
-
-def _analysis():
-    """Centre column: folders, per-stage images, results table, chart and caveats."""
-    with dpg.child_window(width=-390, border=True) as pane:
-        layout.register(pane, "centre")
-        layout.on_resize(lambda: state.rebuild("wk_main", _fill_main))
-        with dpg.group(tag="wk_main"):
-            _fill_main()
-    dpg.bind_item_theme(pane, th.T["pane"])
-
+def _main():
+    with dpg.child_window(width=-430,border=True) as p:
+        with dpg.group(tag="wk_main"): _fill_main()
+    dpg.bind_item_theme(p,th.T["pane"])
 
 def _fill_main():
-    index = state.SEL["walk"]
-    person = data.WALK_RESULTS[index][0]
-    usable = sum(1 for r in data.WALK_RESULTS if r[2] in ("Usable", "Caution"))
+    w.title("Walking analysis","h1"); w.mono("OBJ → silhouette → GaitBase → RESIBO","dim"); w.spacer(10)
+    rows=[]
+    for t in live.tracks():
+        g=t.get("gait") or {}; r=t.get("resolution")
+        rows.append(("master_id "+str(t["master_id"]),g.get("frame_count",0),g.get("status","waiting"),
+                     "ready" if g.get("embedding_ready") else "no",
+                     getattr(r,"state","-") if r else "-",getattr(r,"candidate_id","-") if r else "-"))
+    if rows: w.table(["Track","Frames","Gait","Embedding","RESIBO","Candidate"],rows,weights=[1.2,.7,1.3,1,1,1.4])
+    else: w.note("Waiting for gait","Gait requires enough aligned silhouettes for the configured GaitBase window.","amber",wrap=500)
 
-    with dpg.table_row(parent=w.header_row(70)):
-        with dpg.group():
-            w.title("Walking analysis", "h1")
-            w.mono("Runs on the person box folders, separately from the face side.", "dim")
-        with dpg.group():
-            w.text("Usable", "dim", "ui_sm")
-            w.text("{} of {}".format(usable, len(data.WALK_RESULTS)), "green", "mono")
-    w.spacer(10)
-    dpg.add_separator()
-    w.spacer(14)
+def _right():
+    with dpg.child_window(width=-1,border=True) as p:
+        with dpg.group(tag="wk_right"): _fill_right()
+    dpg.bind_item_theme(p,th.T["panel"])
 
-    w.section("Person folders", "the same folders saved during tracking")
-    def draw(i):
-        name, sub, tone = data.PERSON_FOLDERS[i]
-        tile = w.folder_tile(data.identity_for(name), sub, tone, height=100,
-                             selected=(name == person))
-        state.on_click(tile, _pick, i)
-
-    w.tile_grid(len(data.PERSON_FOLDERS), 4, draw)
-
-    w.spacer(16)
-    w.section(data.identity_for(person) + " - step by step",
-              "each stage keeps its own picture")
-    stage_w = w.share(layout.content_width(has_right=True), len(data.WALK_STAGES))
-    with dpg.group(horizontal=True):
-        for letter, caption, sub in data.WALK_STAGES:
-            w.face_tile(caption, sub, width=stage_w, height=196,
-                        blurred=(letter in "ab"), selected=(letter == "e"),
-                        letter=letter, landmarks=(letter == "c"))
-
-    w.spacer(16)
-    w.section("Walking results", "one cycle = heel down to heel down again")
-    rows = [(data.identity_for(r[0]),) + tuple(r[1:]) for r in data.WALK_TABLE]
-    w.table(["Identity", "Cycles", "Cadence", "Left vs right", "Usable"],
-            rows, weights=[1, 1, 1.1, 1.1, 1.2], highlight=index)
-
-    w.spacer(16)
-    w.section("Where the cycles were found",
-              "ankle height per frame . amber lines are heel down")
-    wp.gait_chart_frame()
-
-
-
-def _detail():
-    """Right rail: inputs, measurements and recording conditions for one person."""
-    with dpg.child_window(width=-1, border=True) as panel:
-        layout.register(panel, "right")
-        with dpg.group(tag="wk_detail"):
-            _fill_detail()
-    dpg.bind_item_theme(panel, th.T["panel"])
-
-
-def _fill_detail():
-    person = data.WALK_RESULTS[state.SEL["walk"]][0]
-    detail = data.WALK_DETAILS[person]
-
-    w.title(data.identity_for(person))
-    w.mono("{} . tracked as {}".format(detail["id"], person), "faint", small=True)
-    w.spacer(8)
-
-    # Conditions that weaken the result are stated up front.
-    if detail["warn"]:
-        w.text(detail["warn"][0], "amber", "ui", wrap=-1)
-        w.text(detail["warn"][1], "dim", "ui_sm", wrap=layout.widths()[1] - 60)
-        w.spacer(14)
-
-    for group, label in (("input", "Input"), ("measured", "Measured"),
-                         ("conditions", "Conditions")):
-        w.text(label, "text", "ui")
-        w.spacer(6)
-        for key, value, tone in detail[group]:
-            w.kv_row(key, value, tone)
-        w.spacer(10)
+def _fill_right():
+    w.title("Resolution")
+    for t in live.tracks():
+        r=t.get("resolution")
+        if r is None:
+            w.kv_row("master_id "+str(t["master_id"]),"Waiting","amber")
+        else:
+            w.kv_row("master_id "+str(t["master_id"]),r.state,"green" if r.state=="resolved" else "amber")
+            w.kv_row("Candidate",r.candidate_id or "-")
+            w.kv_row("Fused score","-" if r.fused_score is None else "{:.4f}".format(r.fused_score))
