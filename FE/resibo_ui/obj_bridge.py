@@ -73,6 +73,8 @@ def _worker(source, case_number, generation):
         from face_runtime import FaceRuntime
         from gait_runtime import GaitGalleryScorer, SegmentationSilhouetteExtractor, load_callable
         from resibo.runtime import ResiboRuntime
+        from resibo import BiometricObservation
+        from resibo.fr_adapter import cosine_to_unit_score
 
         fr_store = None
         fr_db = Path(os.getenv("RESIBO_FR_DB", "FR/workspace/research.sqlite"))
@@ -137,6 +139,31 @@ def _worker(source, case_number, generation):
                     observation.frame, person.person_box, master_id, person.frame_index
                 )
                 _face_results[master_id] = face
+
+                # A live face processor is authoritative for this frame. If
+                # it returns a candidate/score, hand that observation to the
+                # same RESIBO track rather than waiting for the FR database.
+                if face.get("candidate") is not None and face.get("score") is not None:
+                    raw_face_score = float(face["score"])
+                    face_score = (
+                        cosine_to_unit_score(raw_face_score)
+                        if -1.0 <= raw_face_score <= 1.0
+                        else raw_face_score
+                    )
+                    runtime.update_face_observation(
+                        BiometricObservation(
+                            master_id=master_id,
+                            modality="face",
+                            candidate_id=str(face["candidate"]),
+                            score=float(face_score),
+                            quality=float(face.get("quality") or 0.0),
+                            metadata={
+                                "source": "live_face_processor",
+                                "raw_cosine_similarity": raw_face_score,
+                                "frame_index": int(person.frame_index),
+                            },
+                        )
+                    )
 
                 try:
                     resolution = runtime.process_person(
