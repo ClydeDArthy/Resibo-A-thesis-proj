@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, Optional
 
 
@@ -8,6 +8,8 @@ class DiagnosticRequest:
     face_score: Optional[float]
     gait_score: Optional[float]
     context: Dict[str, Any]
+    face_candidate_id: Optional[str] = None
+    gait_candidate_id: Optional[str] = None
 
 
 @dataclass
@@ -18,7 +20,7 @@ class DiagnosticResult:
     condition: Optional[str] = None
     sensitivity: Optional[float] = None
     revised_gait_score: Optional[float] = None
-    details: Dict[str, Any] = None
+    details: Dict[str, Any] = field(default_factory=dict)
 
 
 DiagnosticFn = Callable[[DiagnosticRequest], DiagnosticResult]
