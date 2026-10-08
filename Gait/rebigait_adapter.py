@@ -75,8 +75,14 @@ def _load():
 
         from opengait.modeling.models.baseline import Baseline
 
-        model = Baseline(_cfg(), False)
-        ckpt = torch.load(checkpoint, map_location="cpu")
+        # Build Baseline without BaseModel.__init__: OpenGait's normal
+        # constructor assumes a distributed CUDA test process. RESIBO is a
+        # single-process live runtime, so we construct the network directly.
+        model = Baseline.__new__(Baseline)
+        torch.nn.Module.__init__(model)
+        model.build_network(_cfg()["model_cfg"])
+
+        ckpt = torch.load(checkpoint, map_location="cpu", weights_only=False)
         state = ckpt.get("model", ckpt)
         if not isinstance(state, dict):
             raise ValueError("Unsupported OpenGait checkpoint structure")
