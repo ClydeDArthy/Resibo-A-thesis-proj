@@ -8,6 +8,8 @@ from dataclasses import dataclass
 from typing import Callable, Dict, Optional
 
 import numpy as np
+import importlib
+import os
 
 from .fr_adapter import FRCandidateStore
 from .types import BiometricObservation, ResolutionResult
@@ -35,13 +37,100 @@ class ResiboRuntime:
         gait_scorer: Optional[GaitScorer] = None,
         gait_stage=None,
     ):
-        self.resolver = resolver or ResiboPipeline()
         self.fr_store = fr_store
         self.silhouette_extractor = silhouette_extractor
         self.gait_scorer = gait_scorer
         self.gait_stage = gait_stage
+        self.rebigait = self._build_rebigait()
+        self.resolver = resolver or ResiboPipeline(
+            diagnostic=self._run_rebigait_diagnostic if self.rebigait is not None else None
+        )
         self.tracks: Dict[int, RuntimeTrackState] = {}\n        self.gait_results: Dict[int, object] = {}
         self.rebigait = None
+
+    @staticmethod
+    def _load_optional_callable(env_name):
+        spec = os.getenv(env_name)
+        if not spec:
+            return None
+        if ":" not in spec:
+            raise ValueError(f"{env_name} must be module:function")
+        module, function = spec.split(":", 1)
+        return getattr(importlib.import_module(module), function)
+
+    def _build_rebigait(self):
+        if self.gait_stage is None or self.gait_scorer is None:
+            return None
+        condition = self._load_optional_callable("RESIBO_GAIT_CONDITION_CLASSIFIER")
+        intervention = self._load_optional_callable("RESIBO_GAIT_INTERVENTION")
+        control = self._load_optional_callable("RESIBO_GAIT_CONTROL")
+        if not all((condition, intervention, control)):
+            return None
+
+        from .rebigait import ReBiGait
+
+        def gait_model(sequence):
+            result = self.gait_stage.gaitbase.infer(
+                np.asarray(sequence), track_id=0
+            )
+            return result.embedding
+
+        def compare_embedding(embedding):
+            observation = self.gait_scorer(0, embedding)
+            if observation is None:
+                return None, None
+            return observation.candidate_id, observation.score
+
+        return ReBiGait(
+            gait_model=gait_model,
+            compare_embedding=compare_embedding,
+            condition_classifier=condition,
+            intervention_builder=intervention,
+            control_builder=control,
+        )
+
+    def _run_rebigait_diagnostic(self, request):
+        from .diagnostic import DiagnosticResult
+
+        if self.rebigait is None or self.gait_stage is None:
+            return DiagnosticResult(
+                triggered=False,
+                details={"reason": "ReBiGait backends are not configured."},
+            )
+        sequence = self.gait_stage.silhouette_sequence(request.master_id)
+        if sequence is None or len(sequence) == 0:
+            return DiagnosticResult(
+                triggered=True,
+                details={"reason": "No aligned silhouette sequence is available."},
+            )
+        baseline = self.rebigait._comparison(sequence, "baseline")
+        if request.gait_candidate_id is not None:
+            baseline.candidate_id = request.gait_candidate_id
+        if request.gait_score is not None:
+            baseline.score = float(request.gait_score)
+        result = self.rebigait.run(sequence, baseline, request.context)
+        if result.intervention is None or result.intervention.score is None:
+            return DiagnosticResult(
+                triggered=True,
+                condition=result.condition,
+                sensitivity=result.sensitivity,
+                details=result.details,
+            )
+        return DiagnosticResult(
+            triggered=True,
+            condition=result.condition,
+            sensitivity=result.sensitivity,
+            revised_gait_score=result.intervention.score,
+            details={
+                **result.details,
+                "baseline_candidate": result.baseline.candidate_id if result.baseline else None,
+                "intervention_candidate": result.intervention.candidate_id,
+                "control_candidate": result.control.candidate_id if result.control else None,
+                "baseline_representation": result.baseline.representation if result.baseline else None,
+                "intervention_representation": result.intervention.representation,
+                "control_representation": result.control.representation if result.control else None,
+            },
+        )
 
     def _state(self, master_id: int) -> RuntimeTrackState:
         return self.tracks.setdefault(master_id, RuntimeTrackState())
@@ -140,11 +229,16 @@ class ResiboRuntime:
             return None
 
         candidate_id = state.face.candidate_id if state.face else state.gait.candidate_id
+        context = {
+            "face_metadata": dict(state.face.metadata) if state.face else {},
+            "gait_metadata": dict(state.gait.metadata) if state.gait else {},
+        }
         state.resolution = self.resolver.compare(
             master_id=master_id,
             candidate_id=candidate_id,
             face=state.face,
             gait=state.gait,
+            context=context,
         )
         return state.resolution
 
