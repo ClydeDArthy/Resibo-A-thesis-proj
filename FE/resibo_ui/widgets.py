@@ -277,7 +277,7 @@ def _figure(cx, ground, box_w, box_h, dim=False):
 _LIVE_TEXTURE = "resibo_live_frame_texture"
 
 
-def live_video_frame(width, height, frame, cam_label, time_label, boxes=()):
+def live_video_frame(frame, width, height, cam_label, time_label, boxes=()):
     """Draw the actual frame emitted by OBJ, with current tracking boxes."""
     if frame is None or getattr(frame, "size", 0) == 0:
         return video_frame(width, height, cam_label, time_label, boxes=boxes)
