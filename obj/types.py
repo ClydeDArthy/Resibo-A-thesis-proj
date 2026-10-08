@@ -26,3 +26,14 @@ class FrameObservation:
     timestamp_ms: float
     frame: np.ndarray
     people: list[PersonObservation]
+
+
+@dataclass
+class TrackSummary:
+    """Aggregated metadata for one BoT-SORT master_id trajectory."""
+
+    master_id: int
+    first_frame: int
+    last_frame: int
+    observation_count: int = 0
+    crop_count: int = 0
