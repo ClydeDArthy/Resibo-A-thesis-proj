@@ -1,12 +1,12 @@
-"""Non-blocking bridge between the existing DearPyGui FE and OBJ."""
+"""Non-blocking live coordinator: OBJ is the frame clock for all downstream models."""
 import os
 from pathlib import Path
 import threading
 
-from .. import data, db, state
+from .. import data, db, live, state
 
 _VIDEO_EXTS = {".mp4", ".dav", ".asf", ".avi", ".mov", ".mkv"}
-_lock = threading.Lock()
+_lock = threading.RLock()
 _thread = None
 _key = None
 _status = "idle"
@@ -15,6 +15,8 @@ _error = None
 _progress = 0.0
 _latest = None
 _gait_results = {}
+_face_results = {}
+_resolutions = {}
 
 
 def _case():
@@ -28,92 +30,158 @@ def _video_for_case(case):
             continue
         if path.is_file():
             return path
-        base_dir = case.get("base_dir") or ""
-        if base_dir:
-            candidate = Path(base_dir) / path
-            if candidate.is_file():
-                return candidate
+        base = case.get("base_dir") or ""
+        candidate = Path(base) / path if base else path
+        if candidate.is_file():
+            return candidate
     return None
 
 
 def start_for_current_case():
     global _thread, _key, _status, _result, _error, _progress
-    case = _case()
-    source = _video_for_case(case)
+    source = _video_for_case(_case())
     if source is None:
         with _lock:
-            _status = "no_video"
-            _error = "No accessible video exhibit is attached to this case."
+            _status, _error = "no_video", "No accessible video exhibit is attached to this case."
+            live.set_pipeline("obj", _status, _error)
         return False
-
-    key = (case["number"], str(source))
+    key = (_case()["number"], str(source))
     with _lock:
-        if _thread is not None and _thread.is_alive() and _key == key:
+        if _thread and _thread.is_alive() and _key == key:
             return True
         if _key == key and _status == "completed":
             return True
-        _key = key
-        _status = "starting"
-        _result = None
-        _error = None
-        _progress = 0.0
-        _thread = threading.Thread(
-            target=_worker,
-            args=(source, case["number"]),
-            daemon=True,
-        )
+        _key, _status, _result, _error, _progress = key, "starting", None, None, 0.0
+        _gait_results.clear()
+        _face_results.clear()
+        _resolutions.clear()
+        live.reset()
+        _thread = threading.Thread(target=_worker, args=(source, _case()["number"]), daemon=True)
         _thread.start()
     return True
 
 
 def _worker(source, case_number):
-    global _status, _result, _error, _progress, _latest, _gait_results
+    global _status, _result, _error, _progress, _latest
     try:
         from obj import ObjectConfig, ObjectRunner, ObjectTrackingPipeline
-        from Gait import GaitPipeline
+        from Gait import GaitConfig, GaitPipeline
+        from Gait.gaitbase import GaitBaseAdapter
+        from face_runtime import FaceRuntime
+        from gait_runtime import GaitGalleryScorer, SegmentationSilhouetteExtractor, load_callable
+        from resibo.runtime import ResiboRuntime
 
-        config = ObjectConfig()
+        fr_store = None
+        fr_db = Path(os.getenv("RESIBO_FR_DB", "FR/workspace/research.sqlite"))
+        if fr_db.is_file():
+            from resibo.fr_adapter import FRCandidateStore
+            fr_store = FRCandidateStore(fr_db)
+            fr_store.verify_read_only()
+
+        face_runtime = FaceRuntime(fr_store=fr_store)
+        silhouette = SegmentationSilhouetteExtractor()
+
+        gait_backend = load_callable()
+        gait_scorer = load_callable(os.getenv("RESIBO_GAIT_SCORER")) or GaitGalleryScorer()
+        gait_base = GaitBaseAdapter(gait_backend)
+        gait_stage = GaitPipeline(GaitConfig(), gaitbase=gait_base)
+
+        runtime = ResiboRuntime(
+            fr_store=fr_store,
+            silhouette_extractor=silhouette,
+            gait_scorer=gait_scorer if getattr(gait_scorer, "ready", True) else None,
+            gait_stage=gait_stage,
+        )
+
+        config = ObjectConfig(
+            person_weights=os.getenv("RESIBO_PERSON_WEIGHTS", "yolo11s.pt"),
+            person_confidence=float(os.getenv("RESIBO_PERSON_CONFIDENCE", "0.35")),
+        )
         pipeline = ObjectTrackingPipeline(config)
         runner = ObjectRunner(pipeline)
-        gait_pipeline = GaitPipeline()
-        _gait_results = {}
 
-        def gait_module(person_crop, master_id, frame_index):
-            result = gait_pipeline.update(
-                master_id=master_id,
-                frame_index=frame_index,
-                person_crop=person_crop,
-            )
-            _gait_results[master_id] = result
-            return result
+        live.set_pipeline("obj", "starting")
+        live.set_pipeline("face", "ready" if face_runtime.detector_ready else "waiting", face_runtime.error)
+        live.set_pipeline("gait", "ready" if gait_backend and silhouette.ready else "waiting")
+        live.set_pipeline("resibo", "ready" if fr_store and getattr(gait_scorer, "ready", False) else "waiting")
 
         output_dir = Path("workspace") / "obj" / case_number / source.stem
 
         def on_frame(observation):
-            global _latest, _progress, _status
+            global _latest, _status, _progress
             _latest = observation
             _status = "running"
+            live.set_pipeline("obj", "running")
 
-        _result = runner.run(source, output_dir, gait_module=gait_module, on_frame=on_frame)
-        _status = "completed"
+            # One frame clock: every tracked person is processed here.
+            for person in observation.people:
+                master_id = int(person.master_id)
+                if person.crop is None:
+                    continue
+
+                face = face_runtime.process(
+                    observation.frame, person.person_box, master_id, person.frame_index
+                )
+                _face_results[master_id] = face
+
+                try:
+                    resolution = runtime.process_person(
+                        master_id, person.frame_index, person.crop,
+                        face_quality=float(face.get("quality") or 0.0),
+                    )
+                except RuntimeError as exc:
+                    resolution = None
+                    live.set_pipeline("gait", "error", str(exc))
+
+                gait_state = runtime.get(master_id)
+                gait = _gait_results.get(master_id)
+                if gait is None:
+                    # process_person stores the embedding in runtime but the stage
+                    # result is retained separately below for UI diagnostics.
+                    gait = gait_stage.update(master_id, person.frame_index, person.crop)
+                _gait_results[master_id] = gait
+                _resolutions[master_id] = resolution
+
+                live.update_track(
+                    master_id, person.frame_index, face=face,
+                    gait={
+                        "status": getattr(gait, "status", "waiting"),
+                        "frame_count": getattr(gait, "frame_count", 0),
+                        "embedding_ready": getattr(gait, "embedding", None) is not None,
+                    },
+                    resolution=resolution,
+                )
+
+            # UI progress is based on frames actually processed, not seeded values.
+            live.set_pipeline("face", "running" if face_runtime.detector_ready else "waiting")
+            if gait_backend and silhouette.ready:
+                live.set_pipeline("gait", "running")
+            if fr_store and getattr(gait_scorer, "ready", False):
+                live.set_pipeline("resibo", "running")
+
+        _result = runner.run(source, output_dir, on_frame=on_frame)
         _progress = 1.0
+        _status = "completed"
+        live.set_pipeline("obj", "completed")
+        if face_runtime.detector_ready:
+            live.set_pipeline("face", "completed")
+        if gait_backend and silhouette.ready:
+            live.set_pipeline("gait", "completed")
+        if fr_store and getattr(gait_scorer, "ready", False):
+            live.set_pipeline("resibo", "completed")
     except Exception as exc:
         _error = str(exc)
         _status = "error"
+        live.set_pipeline("obj", "error", _error)
 
 
 def tick():
-    """Render-loop seam; deliberately does no blocking work."""
     return status()
 
 
 def status():
     with _lock:
-        return {
-            "status": _status,
-            "progress": _progress,
-            "error": _error,
-        }
+        return {"status": _status, "progress": _progress, "error": _error}
 
 
 def latest_result():
@@ -123,5 +191,18 @@ def latest_result():
 def latest_observation():
     return _latest
 
+
 def gait_results():
     return dict(_gait_results)
+
+
+def face_results():
+    return dict(_face_results)
+
+
+def resolutions():
+    return dict(_resolutions)
+
+
+def live_snapshot():
+    return live.snapshot()
