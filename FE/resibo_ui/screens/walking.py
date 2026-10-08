@@ -1,7 +1,7 @@
 """Walking: gait analysis run on the person folders, separate from the face side."""
 
 import dearpygui.dearpygui as dpg
-from .. import data, layout, state, theme as th, widgets as w, widgets_plot as wp
+from .. import data, layout, live, state, theme as th, widgets as w, widgets_plot as wp
 
 TITLE = "Walking"
 CRUMB = ("CASE-2026-09A", "Walking")
