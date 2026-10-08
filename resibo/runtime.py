@@ -218,7 +218,8 @@ class ResiboRuntime:
         if self.silhouette_extractor is not None:
             self.silhouette_extractor(person_crop)
 
-        if self.fr_store is not None:
+        state = self._state(master_id)
+        if self.fr_store is not None and state.face is None:
             self.update_face(master_id, quality=face_quality)
 
         if gait_embedding is not None:
