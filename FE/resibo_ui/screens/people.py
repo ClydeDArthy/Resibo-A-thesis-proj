@@ -103,8 +103,25 @@ def _fill_main():
     art = layout.content_width(has_right=False)
     with dpg.child_window(height=18 + FRAME_H + 10 + 30, border=True,
                           no_scrollbar=True, no_scroll_with_mouse=True) as box:
-        w.video_frame(art, FRAME_H, "CAM04 . SEG-02", "2026-08-14 03:16:28",
-                      boxes=_backend_boxes(), looks=_box_looks())
+        observation = obj_bridge.latest_observation()
+        if observation is not None:
+            seconds = observation.timestamp_ms / 1000.0
+            time_label = "frame {:06d} · {:.3f}s".format(
+                observation.frame_index, seconds
+            )
+            w.live_video_frame(
+                observation.frame,
+                art,
+                FRAME_H,
+                "LIVE . OBJ",
+                time_label,
+                boxes=_backend_boxes(),
+            )
+        else:
+            w.video_frame(
+                art, FRAME_H, "LIVE . waiting", "no frame yet",
+                boxes=_backend_boxes(),
+            )
         w.spacer(10)
         player.bar("00:01:50", "00:04:23", progress=0.42,
                    marks=(0.22, 0.62, 0.68), width=art)
