@@ -71,7 +71,7 @@ def _backend_boxes():
     """Convert the latest real tracked boxes into the FE drawing format."""
     observation = obj_bridge.latest_observation()
     if observation is None or not observation.people:
-        return BOXES
+        return []
 
     height, width = observation.frame.shape[:2]
     if width <= 0 or height <= 0:
