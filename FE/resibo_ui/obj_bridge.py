@@ -136,12 +136,24 @@ def _worker(source, case_number):
             if fr_store is not None:
                 runtime.update_face(master_id, quality=face_quality)
 
-            gait = runtime.process_person(
-                master_id,
-                person.frame_index,
-                person.crop,
-                face_quality=face_quality,
-            )
+            try:
+                gait = runtime.process_person(
+                    master_id,
+                    person.frame_index,
+                    person.crop,
+                    face_quality=face_quality,
+                )
+            except RuntimeError as exc:
+                # A missing trained GaitBase backend must not stop YOLO/face
+                # processing or make the UI fall back to seeded gait values.
+                from Gait.pipeline import GaitResult
+                gait = GaitResult(
+                    track_id=master_id,
+                    status="backend_error",
+                    frame_count=len(gait_pipeline.sequences.get(master_id)),
+                    diagnostics={"error": str(exc)},
+                )
+                live.set_pipeline("gait", "error", str(exc))
             _gait_results[master_id] = gait
 
             state = runtime.get(master_id)
