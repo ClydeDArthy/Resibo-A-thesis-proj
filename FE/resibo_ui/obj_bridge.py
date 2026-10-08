@@ -1,9 +1,10 @@
-"""Non-blocking bridge between the existing DearPyGui FE and OBJ."""
+"""Non-blocking bridge between the existing DearPyGui FE and the live model pipeline."""
 import os
 from pathlib import Path
 import threading
 
 from .. import data, db, state
+from .. import live
 
 _VIDEO_EXTS = {".mp4", ".dav", ".asf", ".avi", ".mov", ".mkv"}
 _lock = threading.Lock()
@@ -15,6 +16,8 @@ _error = None
 _progress = 0.0
 _latest = None
 _gait_results = {}
+_face_results = {}
+_resolutions = {}
 
 
 def _case():
@@ -36,6 +39,19 @@ def _video_for_case(case):
     return None
 
 
+def _fr_store():
+    database = Path(os.getenv("RESIBO_FR_DB", "FR/workspace/research.sqlite"))
+    if not database.is_file():
+        return None
+    try:
+        from resibo.fr_adapter import FRCandidateStore
+        store = FRCandidateStore(database)
+        store.verify_read_only()
+        return store
+    except Exception:
+        return None
+
+
 def start_for_current_case():
     global _thread, _key, _status, _result, _error, _progress
     case = _case()
@@ -44,6 +60,7 @@ def start_for_current_case():
         with _lock:
             _status = "no_video"
             _error = "No accessible video exhibit is attached to this case."
+            live.set_pipeline("obj", "no_video", _error)
         return False
 
     key = (case["number"], str(source))
@@ -57,6 +74,10 @@ def start_for_current_case():
         _result = None
         _error = None
         _progress = 0.0
+        _gait_results.clear()
+        _face_results.clear()
+        _resolutions.clear()
+        live.reset()
         _thread = threading.Thread(
             target=_worker,
             args=(source, case["number"]),
@@ -67,39 +88,124 @@ def start_for_current_case():
 
 
 def _worker(source, case_number):
-    global _status, _result, _error, _progress, _latest, _gait_results
+    global _status, _result, _error, _progress, _latest
     try:
         from obj import ObjectConfig, ObjectRunner, ObjectTrackingPipeline
-        from Gait import GaitPipeline
+        from Gait import GaitConfig, GaitPipeline
+        from Gait.gaitbase import GaitBaseAdapter
+        from gait_runtime import load_callable, silhouette_from_person_crop
+        from face_runtime import FaceRuntime
+        from resibo.runtime import ResiboRuntime
 
-        config = ObjectConfig()
+        fr_store = _fr_store()
+        gait_backend = load_callable()
+        gait_scorer = load_callable(os.getenv("RESIBO_GAIT_SCORER"))
+        gait_pipeline = GaitPipeline(
+            GaitConfig(),
+            gaitbase=GaitBaseAdapter(gait_backend),
+        )
+        face_runtime = FaceRuntime(fr_store=fr_store)
+        runtime = ResiboRuntime(
+            fr_store=fr_store,
+            silhouette_extractor=silhouette_from_person_crop,
+            gait_scorer=gait_scorer,
+            gait_stage=gait_pipeline,
+        )
+
+        config = ObjectConfig(
+            person_weights=os.getenv("RESIBO_PERSON_WEIGHTS", "yolo11s.pt"),
+            person_confidence=float(os.getenv("RESIBO_PERSON_CONFIDENCE", "0.35")),
+        )
         pipeline = ObjectTrackingPipeline(config)
         runner = ObjectRunner(pipeline)
-        gait_pipeline = GaitPipeline()
-        _gait_results = {}
-
-        def gait_module(person_crop, master_id, frame_index):
-            result = gait_pipeline.update(
-                master_id=master_id,
-                frame_index=frame_index,
-                person_crop=person_crop,
-            )
-            _gait_results[master_id] = result
-            return result
 
         output_dir = Path("workspace") / "obj" / case_number / source.stem
+        live.set_pipeline("obj", "starting")
+        live.set_pipeline("face", "ready" if face_runtime.detector_ready else "waiting")
+        live.set_pipeline("gait", "ready" if gait_backend else "waiting")
+        live.set_pipeline("resibo", "ready" if fr_store and gait_scorer else "waiting")
+
+        def on_person(person, frame):
+            global _latest
+            master_id = int(person.master_id)
+            face = face_runtime.process(
+                frame, person.person_box, master_id, person.frame_index
+            )
+            _face_results[master_id] = face
+            face_quality = float(face.get("quality") or 0.0)
+            if fr_store is not None:
+                runtime.update_face(master_id, quality=face_quality)
+
+            gait = runtime.process_person(
+                master_id,
+                person.frame_index,
+                person.crop,
+                face_quality=face_quality,
+            )
+            _gait_results[master_id] = gait
+
+            state = runtime.get(master_id)
+            resolution = state.resolution
+            _resolutions[master_id] = resolution
+
+            live.update_track(
+                master_id,
+                frame_index=int(person.frame_index),
+                face=face,
+                gait={
+                    "status": getattr(gait, "status", "waiting"),
+                    "frame_count": getattr(gait, "frame_count", 0),
+                    "embedding_ready": getattr(gait, "embedding", None) is not None,
+                },
+                resolution=resolution,
+            )
+            _latest = frame
 
         def on_frame(observation):
             global _latest, _progress, _status
             _latest = observation
             _status = "running"
+            live.set_pipeline("obj", "running")
 
-        _result = runner.run(source, output_dir, gait_module=gait_module, on_frame=on_frame)
+        # ObjectRunner's dispatch contract is extended here by using the
+        # existing face/gait callbacks while keeping RESIBO outside OBJ.
+        def gait_module(person_crop, master_id, frame_index):
+            result = gait_pipeline.update(master_id, frame_index, person_crop)
+            _gait_results[master_id] = result
+            return result
+
+        def face_module(frame, person_box, master_id, frame_index):
+            # The richer face runtime is invoked by the frame callback below.
+            return face_runtime.process(frame, person_box, master_id, frame_index)
+
+        # The runner remains the source of truth for tracks/crops. The live
+        # callbacks below consume each observation without blocking the UI.
+        def on_observation(observation):
+            for person in observation.people:
+                if person.crop is not None:
+                    on_person(person, observation.frame)
+            on_frame(observation)
+
+        _result = runner.run(
+            source,
+            output_dir,
+            gait_module=None,
+            face_module=face_module,
+            on_frame=on_observation,
+        )
         _status = "completed"
         _progress = 1.0
+        live.set_pipeline("obj", "completed")
+        if gait_backend:
+            live.set_pipeline("gait", "completed")
+        if fr_store:
+            live.set_pipeline("face", "completed")
+        if fr_store and gait_scorer:
+            live.set_pipeline("resibo", "completed")
     except Exception as exc:
         _error = str(exc)
         _status = "error"
+        live.set_pipeline("obj", "error", _error)
 
 
 def tick():
@@ -123,5 +229,18 @@ def latest_result():
 def latest_observation():
     return _latest
 
+
 def gait_results():
     return dict(_gait_results)
+
+
+def face_results():
+    return dict(_face_results)
+
+
+def resolutions():
+    return dict(_resolutions)
+
+
+def live_snapshot():
+    return live.snapshot()
