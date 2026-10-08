@@ -44,8 +44,16 @@ def _steps():
 
 
 def _fill_steps():
-    for name, model, badge, tone, prog in data.PEOPLE_STEPS:
-        w.step_card(name, model, badge, tone, progress=prog)
+    snapshot = live.snapshot()
+    for label, key in (
+        ("YOLO11 detection", "obj"),
+        ("BoT-SORT tracking", "obj"),
+        ("Face handoff", "face"),
+        ("Gait handoff", "gait"),
+    ):
+        status = snapshot["pipelines"].get(key, "idle")
+        tone = "green" if status in ("ready", "running", "completed") else "amber"
+        w.step_card(label, "live runtime", str(status), tone, progress=1.0 if status == "completed" else 0.0)
         w.spacer(4)
 
 
