@@ -65,22 +65,38 @@ def _tiles():
 
 
 def _fill_tiles():
-    identity, _sub, _tone, _person = data.FACE_PERSONS[state.SEL["face_person"]]
-    frame = data.FACE_FRAMES[state.SEL["face_person"]]
-
-    w.text("{} . frame {}".format(identity, frame), "text", "ui", wrap=-1)
+    """Show the current face stage from the live model runtime."""
+    snapshot = live.snapshot()
+    status = snapshot["pipelines"]["face"]
+    w.text("Live face processing", "text", "ui", wrap=-1)
+    w.mono("Detector / FR status: " + str(status), "green" if status in ("ready", "completed") else "amber", small=True)
     w.spacer(10)
-
-    tile_w = w.share(layout.content_width(has_right=True), PER_ROW)
-    for i in range(0, len(data.FACE_TILES), PER_ROW):
-        with dpg.group(horizontal=True):
-            for caption, sub, blurred, bbox, landmarks in data.FACE_TILES[i:i + PER_ROW]:
-                w.face_tile(caption, sub, width=tile_w, height=TILE_H,
-                            blurred=blurred, bbox=bbox, landmarks=landmarks,
-                            centered=True)
-        w.spacer(10)
-
-
+    rows = []
+    for track in snapshot["tracks"]:
+        face = track.get("face") or {}
+        cosine = face.get("score")
+        rows.append((
+            "master_id {}".format(track["master_id"]),
+            track.get("frame_index", "-"),
+            face.get("faces", 0),
+            face.get("detector", "waiting"),
+            face.get("candidate") or "not available",
+            "{:.4f}".format(cosine) if cosine is not None else "-",
+        ))
+    if rows:
+        w.table(
+            ["Track", "Frame", "Faces", "Detector", "Top candidate", "Cosine"],
+            rows,
+            weights=[1.2, .8, .7, 1, 1.4, .9],
+        )
+    else:
+        w.note(
+            "Waiting for live face output",
+            "No face result has been produced for the current tracked video. "
+            "The previous reference-data face tiles are intentionally not shown.",
+            "amber",
+            wrap=layout.content_width(has_right=True),
+        )
 
 def _persons():
     """Right rail: the saved identity folders the crops came from."""
@@ -97,10 +113,25 @@ def _persons():
 
 
 def _fill_persons():
-    def draw(i):
-        identity, sub, tone, _person = data.FACE_PERSONS[i]
-        tile = w.folder_tile(identity, sub, tone,
-                             selected=(i == state.SEL["face_person"]))
-        state.on_click(tile, _pick_person, i)
-
-    w.tile_grid(len(data.FACE_PERSONS), 2, draw)
+    """List live tracks instead of seeded identity folders."""
+    tracks = live.tracks()
+    if not tracks:
+        w.note(
+            "No live tracks",
+            "Open a case with an accessible video and run the detection stage first.",
+            "amber",
+            wrap=layout.widths()[2] - 40,
+        )
+        return
+    for track in tracks:
+        face = track.get("face") or {}
+        badge = face.get("candidate") or "No match"
+        tone = "green" if face.get("candidate") else "amber"
+        item = w.list_item(
+            "master_id {}".format(track["master_id"]),
+            "frame {}".format(track.get("frame_index", "-")),
+            badge,
+            tone,
+        )
+        state.on_click(item, _pick_person, track["master_id"])
+        w.spacer(3)
