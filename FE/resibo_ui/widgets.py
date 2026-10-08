@@ -275,6 +275,7 @@ def _figure(cx, ground, box_w, box_h, dim=False):
 
 
 _LIVE_TEXTURE = "resibo_live_frame_texture"
+_LIVE_TEXTURE_SIZE = [0, 0]
 
 
 def live_video_frame(frame, width, height, cam_label, time_label, boxes=()):
@@ -285,12 +286,16 @@ def live_video_frame(frame, width, height, cam_label, time_label, boxes=()):
     rgb = cv2.resize(rgb, (max(1, int(width)), max(1, int(height))))
     rgba = np.concatenate([rgb, np.full(rgb.shape[:2] + (1,), 255, dtype=np.uint8)], axis=2)
     data = (rgba.astype(np.float32) / 255.0).ravel()
-    if dpg.does_item_exist(_LIVE_TEXTURE):
+    global _LIVE_TEXTURE_SIZE
+    iw, ih = int(width), int(height)
+    if dpg.does_item_exist(_LIVE_TEXTURE) and _LIVE_TEXTURE_SIZE == [iw, ih]:
         dpg.set_value(_LIVE_TEXTURE, data)
     else:
+        if dpg.does_item_exist(_LIVE_TEXTURE):
+            dpg.delete_item(_LIVE_TEXTURE)
         with dpg.texture_registry():
-            dpg.add_raw_texture(int(width), int(height), data, format=dpg.mvFormat_Float_rgba,
-                                tag=_LIVE_TEXTURE)
+            dpg.add_raw_texture(iw, ih, data, format=dpg.mvFormat_Float_rgba, tag=_LIVE_TEXTURE)
+        _LIVE_TEXTURE_SIZE = [iw, ih]
     with dpg.drawlist(width=width, height=height) as dl:
         dpg.draw_image(_LIVE_TEXTURE, (0, 0), (width, height))
         dpg.draw_text((14, 10), cam_label, size=14, color=th.TEXT_DIM)
