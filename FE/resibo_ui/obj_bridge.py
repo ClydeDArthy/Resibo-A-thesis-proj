@@ -159,7 +159,6 @@ def _worker(source, case_number):
                 },
                 resolution=resolution,
             )
-            _latest = frame
 
         def on_frame(observation):
             global _latest, _progress, _status
@@ -167,19 +166,8 @@ def _worker(source, case_number):
             _status = "running"
             live.set_pipeline("obj", "running")
 
-        # ObjectRunner's dispatch contract is extended here by using the
-        # existing face/gait callbacks while keeping RESIBO outside OBJ.
-        def gait_module(person_crop, master_id, frame_index):
-            result = gait_pipeline.update(master_id, frame_index, person_crop)
-            _gait_results[master_id] = result
-            return result
-
-        def face_module(frame, person_box, master_id, frame_index):
-            # The richer face runtime is invoked by the frame callback below.
-            return face_runtime.process(frame, person_box, master_id, frame_index)
-
         # The runner remains the source of truth for tracks/crops. The live
-        # callbacks below consume each observation without blocking the UI.
+        # callback below consumes each observation without blocking the UI.
         def on_observation(observation):
             for person in observation.people:
                 if person.crop is not None:
@@ -190,7 +178,7 @@ def _worker(source, case_number):
             source,
             output_dir,
             gait_module=None,
-            face_module=face_module,
+            face_module=None,
             on_frame=on_observation,
         )
         _status = "completed"
