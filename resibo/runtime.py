@@ -45,8 +45,8 @@ class ResiboRuntime:
         self.resolver = resolver or ResiboPipeline(
             diagnostic=self._run_rebigait_diagnostic if self.rebigait is not None else None
         )
-        self.tracks: Dict[int, RuntimeTrackState] = {}\n        self.gait_results: Dict[int, object] = {}
-        self.rebigait = None
+        self.tracks: Dict[int, RuntimeTrackState] = {}
+        self.gait_results: Dict[int, object] = {}
 
     @staticmethod
     def _load_optional_callable(env_name):
