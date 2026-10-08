@@ -3,7 +3,7 @@ import os
 from pathlib import Path
 import threading
 
-from .. import data, db, live, state
+from . import data, db, live, state
 
 _VIDEO_EXTS = {".mp4", ".dav", ".asf", ".avi", ".mov", ".mkv"}
 _lock = threading.RLock()
