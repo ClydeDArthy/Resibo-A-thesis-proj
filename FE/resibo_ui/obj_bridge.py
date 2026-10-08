@@ -133,12 +133,7 @@ def _worker(source, case_number):
                     resolution = None
                     live.set_pipeline("gait", "error", str(exc))
 
-                gait_state = runtime.get(master_id)
-                gait = _gait_results.get(master_id)
-                if gait is None:
-                    # process_person stores the embedding in runtime but the stage
-                    # result is retained separately below for UI diagnostics.
-                    gait = gait_stage.update(master_id, person.frame_index, person.crop)
+                gait = runtime.gait_results.get(master_id)
                 _gait_results[master_id] = gait
                 _resolutions[master_id] = resolution
 
