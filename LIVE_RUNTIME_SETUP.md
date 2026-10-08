@@ -25,3 +25,40 @@ The code does not manufacture a GaitBase embedding when the trained backend is a
 6. When face and gait observations are usable, RESIBO shows the resolution state/candidate for that same master_id.
 
 The interface never substitutes seeded face/gait reference values for live model output.
+
+## Gait model from rebigait.py
+
+The live adapter now targets the **fine-tuned GaitBase model produced by rebigait.py**, not a generic/fake GaitBase backend.
+
+Expected local layout:
+
+```
+OpenGait/                         # cloned OpenGait repository
+workspace/gait/
+└── GaitBase_DA_CCGR_FT-10000.pt
+```
+
+Optional environment variables:
+
+```
+RESIBO_OPENGAIT_ROOT=OpenGait
+RESIBO_GAIT_CHECKPOINT=workspace/gait/GaitBase_DA_CCGR_FT-10000.pt
+RESIBO_GAIT_DEVICE=cuda
+```
+
+The adapter is `Gait/rebigait_adapter.py`. It loads the OpenGait Baseline architecture used by the notebook, accepts the live 64x64 silhouette sequence, and returns the native `[16, 256]` GaitBase embedding.
+
+The live path is therefore:
+
+```
+YOLO11 person crop
+    -> YOLO11 segmentation
+    -> validated 64x64 silhouettes
+    -> TrackSequenceBuffer
+    -> rebigait GaitBase checkpoint
+    -> [16,256] embedding
+    -> gait scorer/gallery
+    -> RESIBO
+```
+
+A missing checkpoint or incompatible OpenGait installation is reported as a gait error/waiting state. No synthetic gait identity is generated.
