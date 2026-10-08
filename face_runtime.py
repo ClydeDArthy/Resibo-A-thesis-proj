@@ -1,15 +1,23 @@
 """Live face detection boundary used by the FE runtime."""
 import os
-from pathlib import Path
+import importlib
 
 import numpy as np
 
 
+def _load_callable(spec):
+    if not spec:
+        return None
+    module_name, function_name = spec.split(':', 1)
+    return getattr(importlib.import_module(module_name), function_name)
+
+
 class FaceRuntime:
-    def __init__(self, fr_store=None, weights=None):
+    def __init__(self, fr_store=None, weights=None, processor=None):
         self.fr_store = fr_store
         self.weights = str(weights or os.getenv("RESIBO_FACE_WEIGHTS", "yolov11s-face.pt"))
         self.model = None
+        self.processor = processor or _load_callable(os.getenv('RESIBO_FACE_PROCESSOR'))
         self.error = None
         try:
             from ultralytics import YOLO
@@ -46,6 +54,30 @@ class FaceRuntime:
             except Exception as exc:
                 self.error = str(exc)
 
+        if faces and self.processor is not None:
+            best = max(faces, key=lambda item: item["confidence"])
+            bx1, by1, bx2, by2 = [int(v) for v in best["box"]]
+            face_crop = frame[max(0, by1):min(h, by2), max(0, bx1):min(w, bx2)]
+            try:
+                processed = self.processor(
+                    face_crop=face_crop,
+                    master_id=int(master_id),
+                    frame_index=int(frame_index),
+                )
+                result = processed if isinstance(processed, dict) else {}
+                result.update({
+                    "detector": "ready" if self.detector_ready else "error",
+                    "processor": "completed",
+                    "faces": len(faces),
+                    "detections": faces,
+                    "quality": float(best["confidence"]),
+                    "frame_index": int(frame_index),
+                    "master_id": int(master_id),
+                })
+                return result
+            except Exception as exc:
+                self.error = str(exc)
+
         top = None
         if self.fr_store is not None:
             try:
@@ -57,6 +89,7 @@ class FaceRuntime:
 
         return {
             "detector": "ready" if self.detector_ready else "error",
+            "processor": "ready" if self.processor is not None else "waiting",
             "faces": len(faces),
             "detections": faces,
             "quality": float(max([f["confidence"] for f in faces], default=0.0)),
