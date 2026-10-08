@@ -1,7 +1,6 @@
 from typing import Optional
 
 from .config import ResiboConfig
-from .fusion import fuse_scores
 from .types import ResolutionResult
 
 
@@ -22,21 +21,34 @@ class Resolver:
         raw_fused_score: Optional[float] = None,
         reanalysis_fused_score: Optional[float] = None,
         diagnostic=None,
+        candidate_mismatch: bool = False,
     ) -> ResolutionResult:
-        fused = reanalysis_fused_score if reanalysis_fused_score is not None else raw_fused_score
+        fused = (
+            reanalysis_fused_score
+            if reanalysis_fused_score is not None
+            else raw_fused_score
+        )
 
         if fused is None:
             state = "unresolved"
+        elif candidate_mismatch:
+            state = "contradiction"
         elif face_score is not None and gait_score is not None:
             disagreement = abs(float(face_score) - float(gait_score))
             if disagreement >= self.config.contradiction_margin:
-                state = "contradiction" if not diagnostic_triggered else (
-                    "resolved" if fused >= self.config.minimum_accept_score else "ambiguous"
-                )
+                state = "contradiction"
             else:
-                state = "resolved" if fused >= self.config.minimum_accept_score else "ambiguous"
+                state = (
+                    "resolved"
+                    if fused >= self.config.minimum_accept_score
+                    else "ambiguous"
+                )
         else:
-            state = "resolved" if fused >= self.config.minimum_accept_score else "ambiguous"
+            state = (
+                "resolved"
+                if fused >= self.config.minimum_accept_score
+                else "ambiguous"
+            )
 
         return ResolutionResult(
             master_id=master_id,
