@@ -10,10 +10,10 @@ class ObjectConfig:
     """Configuration for YOLO11 person detection + BoT-SORT tracking."""
 
     person_weights: PathLike = "yolo11s.pt"
-    tracker_config: PathLike = "botsort_custom.yaml"
+    tracker_config: PathLike = "botsort.yaml"
     person_class_id: int = 0
     person_confidence: float = 0.35
-    device: Union[int, str] = 0
+    device: Union[int, str, None] = None
     track_buffer: int = 30
 
     # Person crop handling. The crop is passed to the Gait module;
