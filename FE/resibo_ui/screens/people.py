@@ -20,6 +20,7 @@ BOXES = [
 
 FRAME_H = 300
 _backend_key = None
+_last_render_frame = -999999
 
 
 def build():
@@ -50,14 +51,18 @@ def _fill_steps():
 
 def refresh_backend():
     """Refresh the People panel only when OBJ state actually changes."""
-    global _backend_key
+    global _backend_key, _last_render_frame
     status = obj_bridge.status()
     observation = obj_bridge.latest_observation()
     count = len(observation.people) if observation is not None else 0
-    key = (status["status"], id(observation), count)
+    frame_index = observation.frame_index if observation is not None else -1
+    if status["status"] == "running" and frame_index - _last_render_frame < 15:
+        return
+    key = (status["status"], frame_index, count)
     if key == _backend_key:
         return
     _backend_key = key
+    _last_render_frame = frame_index
     if dpg.does_item_exist("pp_main"):
         state.rebuild("pp_main", _fill_main)
 
