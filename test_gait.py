@@ -73,12 +73,9 @@ def test_gaitbase_backend_is_explicitly_required_for_inference():
 
     pipe.update(11, 0, crop)
 
-    try:
-        pipe.update_silhouette(11, 0, mask)
-    except RuntimeError as exc:
-        assert "GaitBase backend is not configured" in str(exc)
-    else:
-        raise AssertionError("missing GaitBase backend must not be silently simulated")
+    result = pipe.update_silhouette(11, 0, mask)
+    assert result.status == "gaitbase_unconfigured"
+    assert "GaitBase backend is not configured" in result.diagnostics["error"]
 
 
 def test_silhouette_must_match_a_tracked_frame():
