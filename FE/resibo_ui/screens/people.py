@@ -5,7 +5,7 @@ opens it full size.
 """
 
 import dearpygui.dearpygui as dpg
-from .. import data, folders, layout, player, state, theme as th, widgets as w
+from .. import data, folders, layout, obj_bridge, player, state, theme as th, widgets as w
 
 TITLE = "Person detection"
 CRUMB = ("CASE-2026-09A", "Detection")
@@ -19,6 +19,7 @@ BOXES = [
 ]
 
 FRAME_H = 300
+_backend_key = None
 
 
 def build():
@@ -47,6 +48,43 @@ def _fill_steps():
         w.spacer(4)
 
 
+def refresh_backend():
+    """Refresh the People panel only when OBJ state actually changes."""
+    global _backend_key
+    status = obj_bridge.status()
+    observation = obj_bridge.latest_observation()
+    count = len(observation.people) if observation is not None else 0
+    key = (status["status"], id(observation), count)
+    if key == _backend_key:
+        return
+    _backend_key = key
+    if dpg.does_item_exist("pp_main"):
+        state.rebuild("pp_main", _fill_main)
+
+
+def _backend_boxes():
+    """Convert the latest real tracked boxes into the FE drawing format."""
+    observation = obj_bridge.latest_observation()
+    if observation is None or not observation.people:
+        return BOXES
+
+    height, width = observation.frame.shape[:2]
+    if width <= 0 or height <= 0:
+        return BOXES
+
+    return [
+        (
+            p.person_box[0] / width,
+            p.person_box[1] / height,
+            (p.person_box[2] - p.person_box[0]) / width,
+            (p.person_box[3] - p.person_box[1]) / height,
+            "master_id {}".format(p.master_id),
+            "green" if p.confidence >= 0.50 else "amber",
+        )
+        for p in observation.people
+    ]
+
+
 def _main():
     """Centre column: the annotated frame and the saved folders."""
     with dpg.child_window(width=-1, border=True) as pane:
@@ -61,7 +99,7 @@ def _fill_main():
     with dpg.child_window(height=18 + FRAME_H + 10 + 30, border=True,
                           no_scrollbar=True, no_scroll_with_mouse=True) as box:
         w.video_frame(art, FRAME_H, "CAM04 . SEG-02", "2026-08-14 03:16:28",
-                      boxes=BOXES, looks=_box_looks())
+                      boxes=_backend_boxes(), looks=_box_looks())
         w.spacer(10)
         player.bar("00:01:50", "00:04:23", progress=0.42,
                    marks=(0.22, 0.62, 0.68), width=art)
@@ -69,6 +107,22 @@ def _fill_main():
 
     w.spacer(18)
     w.title("People found")
+    obj_status = obj_bridge.status()
+    if obj_status["status"] == "running":
+        w.mono("OBJ tracking: running", "blue", small=True)
+    elif obj_status["status"] == "completed":
+        result = obj_bridge.latest_result() or {}
+        w.mono(
+            "OBJ tracking: complete · {} master_id track(s)".format(
+                len(result.get("tracks", {}))
+            ),
+            "green",
+            small=True,
+        )
+    elif obj_status["status"] == "error":
+        w.mono("OBJ tracking: error · " + str(obj_status["error"]), "amber", small=True)
+    elif obj_status["status"] == "no_video":
+        w.mono("OBJ tracking: no accessible video exhibit", "amber", small=True)
     w.spacer(10)
 
     # Two folder groups side by side, as in the approved layout.
