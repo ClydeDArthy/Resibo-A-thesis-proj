@@ -26,3 +26,30 @@ def test_demo_diagnostic_has_intervention_and_matched_control():
     assert control.shape == sequence.shape
     assert not np.array_equal(intervention, sequence)
     assert not np.array_equal(control, sequence)
+
+
+def test_demo_diagnostic_loop_executes_all_three_comparisons():
+    from resibo.rebigait import ReBiGait
+    sequence = np.ones((8, 64, 64), dtype=np.uint8) * 255
+
+    def model(seq):
+        return gait_backend(seq, 1)
+
+    def compare(embedding):
+        from demo_runtime import DemoGaitScorer
+        result = DemoGaitScorer()(1, embedding)
+        return result.candidate_id, result.score
+
+    loop = ReBiGait(
+        gait_model=model,
+        compare_embedding=compare,
+        condition_classifier=condition_classifier,
+        intervention_builder=intervention_builder,
+        control_builder=control_builder,
+    )
+    baseline = loop._comparison(sequence, "baseline")
+    result = loop.run(sequence, baseline, {})
+    assert result.triggered
+    assert result.intervention is not None
+    assert result.control is not None
+    assert result.sensitivity is not None
