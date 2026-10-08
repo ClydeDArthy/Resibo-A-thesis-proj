@@ -18,6 +18,15 @@ def build():
         _detail()
 
 
+def refresh_live():
+    if dpg.does_item_exist("wk_list"):
+        state.rebuild("wk_list", _fill_list)
+    if dpg.does_item_exist("wk_main"):
+        state.rebuild("wk_main", _fill_main)
+    if dpg.does_item_exist("wk_detail"):
+        state.rebuild("wk_detail", _fill_detail)
+
+
 def _results():
     with dpg.child_window(width=300, border=True) as panel:
         layout.register(panel, "left")
