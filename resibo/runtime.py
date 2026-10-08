@@ -41,6 +41,7 @@ class ResiboRuntime:
         self.gait_scorer = gait_scorer
         self.gait_stage = gait_stage
         self.tracks: Dict[int, RuntimeTrackState] = {}\n        self.gait_results: Dict[int, object] = {}
+        self.rebigait = None
 
     def _state(self, master_id: int) -> RuntimeTrackState:
         return self.tracks.setdefault(master_id, RuntimeTrackState())
