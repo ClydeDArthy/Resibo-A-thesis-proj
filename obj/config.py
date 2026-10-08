@@ -34,7 +34,9 @@ class ObjectConfig:
             raise ValueError("minimum crop dimensions must be positive")
 
     def validate_files(self) -> None:
-        if not Path(self.person_weights).is_file():
+        name = Path(str(self.person_weights)).name
+        official = name in {"yolo11n.pt", "yolo11s.pt", "yolo11m.pt", "yolo11l.pt", "yolo11x.pt"}
+        if not Path(self.person_weights).is_file() and not official:
             raise FileNotFoundError(
                 f"YOLO11 person checkpoint not found: {self.person_weights}"
             )
