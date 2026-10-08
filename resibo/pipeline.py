@@ -80,8 +80,11 @@ class ResiboPipeline:
         diagnostic = self.diagnostic(request)
 
         if not diagnostic.triggered or diagnostic.revised_gait_score is None:
-            initial.diagnostic_triggered = bool(diagnostic.triggered)
-            initial.diagnostic = diagnostic.details or {}
+            initial.diagnostic_triggered = True
+            initial.diagnostic = {
+                "backend_triggered": bool(diagnostic.triggered),
+                **(diagnostic.details or {}),
+            }
             return initial
 
         revised = fuse_scores(
@@ -96,6 +99,7 @@ class ResiboPipeline:
         details = dict(diagnostic.details or {})
         details.update(
             {
+                "backend_triggered": True,
                 "condition": diagnostic.condition,
                 "sensitivity": diagnostic.sensitivity,
                 "raw_gait_score": gait_score,
