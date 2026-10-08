@@ -38,7 +38,7 @@ class GaitPipeline:
             max_foreground_ratio=self.config.max_foreground_ratio,
         )
         self.gaitbase = gaitbase or GaitBaseAdapter()
-        self._silhouettes: Dict[int, list[np.ndarray]] = {}
+        self._silhouettes: Dict[int, Dict[int, np.ndarray]] = {}
 
     def update(self, master_id: int, frame_index: int, person_crop: np.ndarray) -> GaitResult:
         """Record the detector crop. No gait inference is attempted from RGB."""
@@ -70,22 +70,35 @@ class GaitPipeline:
                 diagnostics={"frame_index": frame_index},
             )
 
-        bucket = self._silhouettes.setdefault(master_id, [])
-        bucket.append(item.mask)
-        if len(bucket) > self.config.sequence_length:
-            del bucket[:-self.config.sequence_length]
+        observations = {obs.frame_index for obs in self.sequences.get(master_id)}
+        if frame_index not in observations:
+            return GaitResult(
+                track_id=master_id,
+                status="orphan_silhouette",
+                frame_count=count,
+                diagnostics={"frame_index": frame_index},
+            )
+
+        bucket = self._silhouettes.setdefault(master_id, {})
+        bucket[frame_index] = item.mask
+
+        # Keep masks aligned to the frames still retained by the RGB track window.
+        current_frames = sorted(observations)
+        bucket = {frame: bucket[frame] for frame in current_frames if frame in bucket}
+        self._silhouettes[master_id] = bucket
 
         continuous, largest_gap = self.sequences.continuity(
             master_id, self.config.max_frame_gap
         )
 
-        if len(bucket) < self.config.min_valid_frames:
+        ordered_frames = sorted(bucket)
+        if len(ordered_frames) < self.config.min_valid_frames:
             return GaitResult(
                 track_id=master_id,
                 status="collecting_silhouettes",
                 frame_count=count,
                 diagnostics={
-                    "valid_silhouettes": len(bucket),
+                    "valid_silhouettes": len(ordered_frames),
                     "largest_frame_gap": largest_gap,
                     "track_continuous": continuous,
                 },
@@ -99,7 +112,7 @@ class GaitPipeline:
                 diagnostics={"largest_frame_gap": largest_gap},
             )
 
-        sequence = np.stack(bucket[-self.config.sequence_length:], axis=0)
+        sequence = np.stack([bucket[frame] for frame in ordered_frames[-self.config.sequence_length:]], axis=0)
         embedding: GaitEmbedding = self.gaitbase.infer(sequence, master_id)
         return GaitResult(
             track_id=master_id,
