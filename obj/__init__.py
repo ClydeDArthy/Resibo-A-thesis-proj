@@ -2,7 +2,6 @@
 
 from .config import ObjectConfig
 from .pipeline import ObjectTrackingPipeline
-
-__all__ = ["ObjectConfig", "ObjectTrackingPipeline"]
-
 from .runner import ObjectRunner
+
+__all__ = ["ObjectConfig", "ObjectTrackingPipeline", "ObjectRunner"]
