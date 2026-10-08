@@ -33,11 +33,13 @@ class ResiboRuntime:
         fr_store: Optional[FRCandidateStore] = None,
         silhouette_extractor: Optional[SilhouetteExtractor] = None,
         gait_scorer: Optional[GaitScorer] = None,
+        gait_stage=None,
     ):
         self.resolver = resolver or ResiboPipeline()
         self.fr_store = fr_store
         self.silhouette_extractor = silhouette_extractor
         self.gait_scorer = gait_scorer
+        self.gait_stage = gait_stage
         self.tracks: Dict[int, RuntimeTrackState] = {}
 
     def _state(self, master_id: int) -> RuntimeTrackState:
@@ -68,6 +70,36 @@ class ResiboRuntime:
                 raise ValueError("gait_scorer must return a gait observation for the same master_id")
             self._state(master_id).gait = observation
         return observation
+
+    def process_person(
+        self,
+        master_id: int,
+        frame_index: int,
+        person_crop: np.ndarray,
+        face_quality: float = 1.0,
+    ) -> Optional[ResolutionResult]:
+        """Pass one tracked person through Gait and then RESIBO when possible."""
+        if self.gait_stage is None:
+            return self.update_track(master_id, person_crop, face_quality=face_quality)
+
+        self.gait_stage.update(master_id, frame_index, person_crop)
+        if self.silhouette_extractor is None:
+            return self.update_track(master_id, person_crop, face_quality=face_quality)
+
+        silhouette = self.silhouette_extractor(person_crop)
+        if silhouette is None:
+            return self.update_track(master_id, person_crop, face_quality=face_quality)
+
+        gait_result = self.gait_stage.update_silhouette(master_id, frame_index, silhouette)
+        if getattr(gait_result, "status", None) != "inferred":
+            return self.update_track(master_id, person_crop, face_quality=face_quality)
+
+        return self.update_track(
+            master_id,
+            person_crop,
+            gait_embedding=gait_result.embedding,
+            face_quality=face_quality,
+        )
 
     def update_track(
         self,
