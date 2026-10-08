@@ -126,7 +126,8 @@ def _worker(source, case_number):
         live.set_pipeline("obj", "starting")
         live.set_pipeline("face", "ready" if face_runtime.detector_ready else "waiting")
         live.set_pipeline("gait", "ready" if gait_backend and silhouette_extractor.ready else "waiting")
-        live.set_pipeline("resibo", "ready" if fr_store and gait_scorer else "waiting")
+        gait_scorer_ready = bool(getattr(gait_scorer, "ready", True))
+        live.set_pipeline("resibo", "ready" if fr_store and gait_scorer_ready else "waiting")
 
         def on_person(person, frame):
             global _latest
