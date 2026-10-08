@@ -74,3 +74,41 @@ def test_runtime_clears_track_state():
     runtime.tracks[7] = runtime.get(7)
     runtime.clear(7)
     assert 7 not in runtime.tracks
+
+
+class _FakeGaitResult:
+    status = "inferred"
+    embedding = np.arange(4, dtype=np.float32)
+
+
+class _FakeGaitStage:
+    def __init__(self):
+        self.calls = []
+
+    def update(self, master_id, frame_index, person_crop):
+        self.calls.append(("update", master_id, frame_index))
+
+    def update_silhouette(self, master_id, frame_index, silhouette):
+        self.calls.append(("silhouette", master_id, frame_index))
+        return _FakeGaitResult()
+
+
+def test_runtime_process_person_uses_matching_gait_stage():
+    gait_stage = _FakeGaitStage()
+
+    def gait_scorer(master_id, embedding):
+        return BiometricObservation(master_id, "gait", "person-A", 0.82)
+
+    runtime = ResiboRuntime(
+        gait_stage=gait_stage,
+        silhouette_extractor=lambda crop: np.ones((20, 10), dtype=np.uint8) * 255,
+        gait_scorer=gait_scorer,
+    )
+
+    result = runtime.process_person(
+        7, 12, np.zeros((100, 50, 3), dtype=np.uint8)
+    )
+
+    assert result is not None
+    assert result.state == "resolved"
+    assert gait_stage.calls == [("update", 7, 12), ("silhouette", 7, 12)]
