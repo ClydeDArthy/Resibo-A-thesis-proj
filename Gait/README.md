@@ -1,43 +1,21 @@
-# Resibo-A-thesis-proj
+# RESIBO Gait module
 
-## Running it
+This package owns tracked-person gait sequence collection and the boundary to the project's OpenGait/GaitBase inference backend.
 
-```bash
-pip install -r requirements.txt
-python main.py
-```
+## Pipeline boundary
 
-## Layout
+`OBJ master_id -> RGB person crops -> gait sequence buffer -> validated silhouettes -> GaitBase embedding`
 
-| Path | Purpose |
-| --- | --- |
-| `main.py` | Entry point — launches the [resibo](resibo/) front-end |
-| `resibo/` |fusion component |
-| `FE/` | Front-end prototype (Dear PyGui) — see [resibo/README.md](resibo/README.md) |
-| `FR/` | Face recognition &  Face enhancement |
-| `Gait/` | Gait recognition |
-| `df/` | Deepfake detection |
-| `obj/` | Object/person detection |
+The RGB crop is **not** silently converted into a silhouette. A silhouette extractor must be supplied explicitly before GaitBase inference is considered ready.
 
-Each module folder is wired into `main.py` as its pipeline stage is finished.# Resibo-A-thesis-proj
+## Main files
 
-## Running it
+- `Gait/config.py` — sequence and preprocessing settings
+- `Gait/sequence.py` — per-`master_id` frame buffers and continuity checks
+- `Gait/preprocessing.py` — silhouette validation/normalization
+- `Gait/gaitbase.py` — OpenGait/GaitBase adapter boundary
+- `Gait/pipeline.py` — detector-facing gait pipeline
 
-```bash
-pip install -r requirements.txt
-python main.py
-```
+## Runtime requirement
 
-## Layout
-
-| Path | Purpose |
-| --- | --- |
-| `main.py` | Entry point — launches the [resibo](resibo/) front-end |
-| `resibo/` |fusion component |
-| `FE/` | Front-end prototype (Dear PyGui) — see [resibo/README.md](resibo/README.md) |
-| `FR/` | Face recognition &  Face enhancement |
-| `Gait/` | Gait recognition |
-| `df/` | Deepfake detection |
-| `obj/` | Object/person detection |
-
-Each module folder is wired into `main.py` as its pipeline stage is finished.
+The repository contains the integration boundary, not a bundled GaitBase checkpoint or a fabricated silhouette extractor. Before live gait inference, connect the project's tested OpenGait/GaitBase backend and a validated silhouette source.
