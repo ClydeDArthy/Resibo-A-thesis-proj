@@ -81,6 +81,19 @@ def test_gaitbase_backend_is_explicitly_required_for_inference():
         raise AssertionError("missing GaitBase backend must not be silently simulated")
 
 
+def test_silhouette_must_match_a_tracked_frame():
+    cfg = GaitConfig(sequence_length=2, min_valid_frames=1)
+    pipe = GaitPipeline(cfg)
+    crop = np.zeros((100, 50, 3), dtype=np.uint8)
+    mask = np.zeros((100, 50), dtype=np.uint8)
+    mask[10:90, 15:35] = 255
+
+    pipe.update(12, 10, crop)
+    result = pipe.update_silhouette(12, 11, mask)
+
+    assert result.status == "orphan_silhouette"
+
+
 if __name__ == "__main__":
     test_sequence_collection()
     test_silhouette_normalization_and_inference()
