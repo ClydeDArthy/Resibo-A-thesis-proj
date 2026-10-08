@@ -18,6 +18,7 @@ SCREENS = [progress, evidence, working_copy, clips, people, faces, walking, hist
 VIEWPORT_W, VIEWPORT_H = 1500, 940
 _nav_icons = []
 _current = 0
+_live_refresh_tick = 0
 
 
 def _screen_index(name):
@@ -70,6 +71,7 @@ def open_case(index):
     dpg.configure_item("examiner_block", show=True)
     dpg.configure_item("vault_line", show=True)
     dpg.set_value("examiner_name", data.CASES[index].get("examiner", "-"))
+    obj_bridge.start_for_current_case()
     progress.refresh()
     evidence.refresh()
     clips.refresh()
@@ -352,6 +354,7 @@ def run():
     splash.build()          # covers the window until the intro finishes
 
     # Manual loop so the scrub bars and toasts can update each frame.
+    global _live_refresh_tick
     while dpg.is_dearpygui_running():
         splash.tick()
         if dpg.get_item_configuration("picker")["show"]:
@@ -364,8 +367,16 @@ def run():
         video_preview.tick()
         actions.tick()
         obj_bridge.tick()
-        if SCREENS[_current] is people:
-            people.refresh_backend()
+        _live_refresh_tick += 1
+        if _live_refresh_tick % 10 == 0:
+            if SCREENS[_current] is people:
+                people.refresh_backend()
+            elif SCREENS[_current] is faces:
+                faces.refresh_live()
+            elif SCREENS[_current] is walking:
+                walking.refresh_live()
+            elif SCREENS[_current] is progress:
+                progress.refresh_live()
         dpg.render_dearpygui_frame()
     video_preview.hide()
     video_preview.cleanup()
