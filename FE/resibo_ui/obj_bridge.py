@@ -85,6 +85,15 @@ def _worker(source, case_number, generation):
         silhouette = SegmentationSilhouetteExtractor()
 
         gait_backend = load_callable()
+        if gait_backend is None:
+            checkpoint = Path(os.getenv(
+                "RESIBO_GAIT_CHECKPOINT",
+                "workspace/gait/GaitBase_DA_CCGR_FT-10000.pt",
+            ))
+            if checkpoint.is_file():
+                from Gait.rebigait_adapter import infer_gaitbase
+                gait_backend = infer_gaitbase
+
         gait_scorer = load_callable(os.getenv("RESIBO_GAIT_SCORER")) or GaitGalleryScorer()
         gait_base = GaitBaseAdapter(gait_backend)
         gait_stage = GaitPipeline(GaitConfig(), gaitbase=gait_base)
