@@ -5,7 +5,7 @@ enhanced crop stays visible.
 """
 
 import dearpygui.dearpygui as dpg
-from .. import data, layout, state, theme as th, widgets as w
+from .. import data, layout, live, state, theme as th, widgets as w
 
 TITLE = "Face enhancement"
 CRUMB = ("CASE-2026-09A", "Face enhancement")
