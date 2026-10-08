@@ -80,7 +80,7 @@ class ResiboPipeline:
         diagnostic = self.diagnostic(request)
 
         if not diagnostic.triggered or diagnostic.revised_gait_score is None:
-            initial.diagnostic_triggered = bool(diagnostic.triggered)
+            initial.diagnostic_triggered = True
             initial.diagnostic = {
                 "backend_triggered": bool(diagnostic.triggered),
                 "condition": diagnostic.condition,
