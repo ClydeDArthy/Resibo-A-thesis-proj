@@ -136,6 +136,17 @@ class GaitPipeline:
             },
         )
 
+    def silhouette_sequence(self, master_id: int):
+        """Return the currently aligned 64x64 silhouette sequence for a track."""
+        bucket = self._silhouettes.get(int(master_id), {})
+        if not bucket:
+            return None
+        frames = sorted(bucket)
+        return np.stack(
+            [bucket[frame] for frame in frames[-self.config.sequence_length:]],
+            axis=0,
+        )
+
     def clear(self, master_id: int) -> None:
         self.sequences.clear(master_id)
         self._silhouettes.pop(master_id, None)
