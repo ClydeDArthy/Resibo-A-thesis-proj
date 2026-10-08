@@ -5,7 +5,7 @@ screen that produced them.
 """
 
 import dearpygui.dearpygui as dpg
-from .. import data, state, theme as th, widgets as w
+from .. import data, live, state, theme as th, widgets as w
 
 TITLE = "Progress"
 CRUMB = ("CASE-2026-09A", "Progress")
@@ -71,7 +71,21 @@ def _fill_steps():
     w.spacer(10)
     dpg.add_separator()
     w.spacer(14)
-    w.section("Progress", "click a step to see its flags")
+    w.section("Live model pipeline", "current runtime state")
+    pipeline = live.pipeline_status()
+    w.table(
+        ["Stage", "State"],
+        [
+            ("YOLO11 + BoT-SORT", pipeline.get("obj", "idle")),
+            ("Face / OSDFace + AdaFace", pipeline.get("face", "idle")),
+            ("Gait / GaitBase", pipeline.get("gait", "idle")),
+            ("RESIBO resolution", pipeline.get("resibo", "idle")),
+        ],
+        weights=[1.6, 1],
+    )
+    w.spacer(14)
+    w.section("Progress", "case workflow")
+
 
     for i, step in enumerate(data.STEPS):
         badge, tone = data.step_state(i, case)
