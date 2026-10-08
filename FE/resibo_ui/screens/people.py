@@ -123,8 +123,17 @@ def _fill_main():
                 boxes=_backend_boxes(),
             )
         w.spacer(10)
-        player.bar("00:01:50", "00:04:23", progress=0.42,
-                   marks=(0.22, 0.62, 0.68), width=art)
+        if observation is not None:
+            w.mono(
+                "Live frame {:,} · {:.3f}s".format(
+                    observation.frame_index,
+                    observation.timestamp_ms / 1000.0,
+                ),
+                "dim",
+                small=True,
+            )
+        else:
+            w.mono("Waiting for the live video stream.", "faint", small=True)
     dpg.bind_item_theme(box, th.T["card"])
 
     w.spacer(18)
