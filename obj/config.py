@@ -34,7 +34,14 @@ class ObjectConfig:
             raise ValueError("minimum crop dimensions must be positive")
 
     def validate_files(self) -> None:
-        if not Path(self.person_weights).is_file():
+        weights = str(self.person_weights)
+        # Official Ultralytics weights (e.g. yolo11s.pt) are allowed to be
+        # resolved/downloaded by Ultralytics on first model construction.
+        # Custom checkpoints must exist locally.
+        official = Path(weights).name in {
+            "yolo11n.pt", "yolo11s.pt", "yolo11m.pt", "yolo11l.pt", "yolo11x.pt"
+        }
+        if not Path(weights).is_file() and not official:
             raise FileNotFoundError(
                 f"YOLO11 person checkpoint not found: {self.person_weights}"
             )
