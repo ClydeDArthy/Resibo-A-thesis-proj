@@ -6,3 +6,51 @@ imageio-ffmpeg>=0.4
 
 numpy>=1.26
 ultralytics>=8.3
+
+# ---------------------------------------------------------------------------
+# RESIBO runtime notes
+# ---------------------------------------------------------------------------
+# 1) YOLO11 + BoT-SORT:
+#    Ultralytics is installed above. The runtime does NOT vendor model weights.
+#    Set RESIBO_PERSON_WEIGHTS to the YOLO11 person checkpoint when needed.
+#
+# 2) Face / OSDFace / AdaFace:
+#    The repository's production face workflow is the existing FR
+#    OSDFace + AdaFace research/GPU workflow. It is not replaced by a
+#    pip-only reimplementation here. For live execution, configure:
+#      RESIBO_FACE_PROCESSOR=module:function
+#    The callable must perform the actual OSDFace -> enhancement -> AdaFace
+#    processing and return at least candidate/score when a match is produced.
+#    The imported FR SQLite store remains a read-only fallback.
+#
+# 3) GaitBase / OpenGait:
+#    Gait/rebigait_adapter.py is a live adapter to the OpenGait GaitBase
+#    architecture used by the ReBiGait work. OpenGait is not bundled in this
+#    repository. Set:
+#      RESIBO_OPENGAIT_ROOT=<path-to-OpenGait>
+#      RESIBO_GAIT_CHECKPOINT=<path-to-GaitBase checkpoint>
+#    The default checkpoint path is:
+#      workspace/gait/GaitBase_DA_CCGR_FT-10000.pt
+#    PyTorch is intentionally not pinned here because the correct wheel
+#    depends on the target CPU/CUDA environment. Install a compatible
+#    PyTorch build separately before enabling the GaitBase backend.
+#
+# 4) Silhouette extraction:
+#    Configure the actual silhouette backend/checkpoint through the existing
+#    Gait/FE runtime configuration. RGB person crops are not silently treated
+#    as silhouettes.
+#
+# 5) ReBiGait diagnostic loop:
+#    The diagnostic stage is decision-triggered. It requires real condition,
+#    intervention, and matched-control callables:
+#      RESIBO_GAIT_CONDITION_CLASSIFIER=module:function
+#      RESIBO_GAIT_INTERVENTION=module:function
+#      RESIBO_GAIT_CONTROL=module:function
+#    If these are not configured, RESIBO reports the diagnostic as
+#    unconfigured/inconclusive rather than fabricating a re-analysis score.
+#
+# 6) Gallery/scoring:
+#      RESIBO_GAIT_SCORER=module:function
+#    may be supplied for the live gait candidate comparison. Otherwise the
+#    configured gallery scorer is used when its gallery is available.
+# ---------------------------------------------------------------------------
