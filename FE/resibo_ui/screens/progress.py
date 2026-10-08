@@ -26,6 +26,11 @@ def build():
         _details()
 
 
+def refresh_live():
+    if dpg.does_item_exist("pg_steps"):
+        state.rebuild("pg_steps", _fill_steps)
+
+
 def _toggle(sender, app_data, index):
     """Open one step's flags, closing whichever was open."""
     _expanded["step"] = None if _expanded["step"] == index else index
