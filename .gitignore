@@ -19,3 +19,11 @@ desktop.ini
 # Thesis manuscript — unpublished draft with author contact details.
 # Remove this line if you deliberately want it in the repository.
 resibo/images/*.pdf
+
+# Runtime processing outputs and model checkpoints
+workspace/
+runs/
+*.pt
+*.onnx
+FR/**/workspace/*.sqlite
+FR/**/workspace/*.sqlite3
