@@ -64,9 +64,148 @@ def start_for_current_case():
     return True
 
 
+def _demo_mode():
+    value = os.getenv("RESIBO_DEMO_MODE", "auto").strip().lower()
+    if value in {"1", "true", "yes", "demo"}:
+        return True
+    if value in {"0", "false", "no", "off"}:
+        return False
+    weights = Path(os.getenv("RESIBO_PERSON_WEIGHTS", "yolo11s.pt"))
+    return not weights.is_file()
+
+
+def _run_demo_video(source, case_number, generation, on_frame):
+    import cv2
+    from obj.types import FrameObservation, PersonObservation
+
+    cap = cv2.VideoCapture(str(source))
+    if not cap.isOpened():
+        raise RuntimeError("Demo mode could not open the video exhibit.")
+    total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+    fps = float(cap.get(cv2.CAP_PROP_FPS) or 25.0)
+    frame_index = 0
+    while True:
+        if generation != _generation:
+            break
+        ok, frame = cap.read()
+        if not ok:
+            break
+        h, w = frame.shape[:2]
+        # One stable trajectory keeps the DPG demo deterministic.
+        x1, x2 = int(w * 0.25), int(w * 0.75)
+        y1, y2 = int(h * 0.08), int(h * 0.96)
+        crop = frame[y1:y2, x1:x2].copy()
+        person = PersonObservation(
+            master_id=1, person_box=(x1, y1, x2, y2), confidence=0.93,
+            frame_index=frame_index, timestamp_ms=(frame_index / fps) * 1000.0,
+            crop=crop,
+        )
+        on_frame(FrameObservation(
+            frame_index=frame_index, timestamp_ms=(frame_index / fps) * 1000.0,
+            frame=frame, people=[person],
+        ))
+        frame_index += 1
+        _progress = frame_index / total if total else 0.0
+        globals()["_progress"] = float(_progress)
+    cap.release()
+    return {"mode": "demo", "frame_count": frame_index, "master_ids": [1]}
+
 def _worker(source, case_number, generation):
     global _status, _result, _error, _progress, _latest
     try:
+        demo_mode = _demo_mode()
+        if demo_mode:
+            from demo_runtime import (
+                face_processor, silhouette, gait_backend, DemoGaitScorer,
+                condition_classifier, intervention_builder, control_builder,
+            )
+            from resibo.runtime import ResiboRuntime
+            from Gait import GaitConfig, GaitPipeline
+            from Gait.gaitbase import GaitBaseAdapter
+            from resibo import BiometricObservation
+            from resibo.pipeline import ResiboPipeline
+            from resibo.diagnostic import DiagnosticResult
+
+            class DemoFace:
+                detector_ready = True
+                processor = face_processor
+                error = None
+                def process(self, frame, person_box, master_id, frame_index):
+                    x1, y1, x2, y2 = [int(v) for v in person_box]
+                    return face_processor(frame[max(0,y1):max(y1+1,y2), max(0,x1):max(x1+1,x2)], master_id, frame_index) | {
+                        "detector": "demo", "processor": "completed", "faces": 1,
+                        "detections": [{"box": list(person_box), "confidence": 0.93}],
+                        "frame_index": frame_index, "master_id": master_id,
+                    }
+
+            face_runtime = DemoFace()
+            gait_stage = GaitPipeline(
+                GaitConfig(sequence_length=32, min_valid_frames=8),
+                gaitbase=GaitBaseAdapter(gait_backend),
+            )
+            class DemoSilhouette:
+                ready = True
+                error = None
+                def __call__(self, crop): return silhouette(crop)
+
+            gait_scorer = DemoGaitScorer()
+            runtime = ResiboRuntime(
+                silhouette_extractor=DemoSilhouette(),
+                gait_scorer=gait_scorer,
+                gait_stage=gait_stage,
+            )
+            runtime.resolver = ResiboPipeline(diagnostic=runtime._run_rebigait_diagnostic)
+            runtime.rebigait = runtime.rebigait or __import__("resibo.rebigait", fromlist=["ReBiGait"]).ReBiGait(
+                gait_model=lambda seq: gait_backend(seq, 0),
+                compare_embedding=lambda emb: (gait_scorer(1, emb).candidate_id, gait_scorer(1, emb).score),
+                condition_classifier=condition_classifier,
+                intervention_builder=intervention_builder,
+                control_builder=control_builder,
+            )
+            live.set_pipeline("obj", "running", "DEMO MODE")
+            live.set_pipeline("face", "running", "DEMO MODE")
+            live.set_pipeline("gait", "running", "DEMO MODE")
+            live.set_pipeline("resibo", "running", "DEMO MODE")
+            output_dir = Path("workspace") / "obj" / case_number / source.stem
+
+            def demo_frame(observation):
+                global _latest
+                _latest = observation
+                for person in observation.people:
+                    face = face_runtime.process(
+                        observation.frame, person.person_box, person.master_id, person.frame_index
+                    )
+                    raw_face = float(face["score"])
+                    runtime.update_face_observation(BiometricObservation(
+                        master_id=person.master_id, modality="face",
+                        candidate_id=face["candidate"], score=raw_face,
+                        quality=face["quality"], metadata={"demo": True},
+                    ))
+                    resolution = runtime.process_person(
+                        person.master_id, person.frame_index, person.crop,
+                        face_quality=face["quality"],
+                    )
+                    gait = runtime.gait_results.get(person.master_id)
+                    _face_results[person.master_id] = face
+                    _gait_results[person.master_id] = gait
+                    _resolutions[person.master_id] = resolution
+                    live.update_track(
+                        person.master_id, person.frame_index, face=face,
+                        gait={"status": getattr(gait, "status", "waiting"),
+                              "frame_count": getattr(gait, "frame_count", 0),
+                              "embedding_ready": getattr(gait, "embedding", None) is not None},
+                        resolution=resolution,
+                    )
+
+            _result = _run_demo_video(source, case_number, generation, demo_frame)
+            _progress = 1.0
+            _status = "completed"
+            live.set_pipeline("obj", "completed", "DEMO MODE")
+            live.set_pipeline("face", "completed", "DEMO MODE")
+            live.set_pipeline("gait", "completed", "DEMO MODE")
+            live.set_pipeline("resibo", "completed", "DEMO MODE")
+            return
+
         from obj import ObjectConfig, ObjectRunner, ObjectTrackingPipeline
         from Gait import GaitConfig, GaitPipeline
         from Gait.gaitbase import GaitBaseAdapter
