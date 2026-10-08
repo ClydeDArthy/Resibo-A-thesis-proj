@@ -20,8 +20,8 @@ def _discover_face_weights(explicit=None):
         ])
     for candidate in candidates:
         if candidate.is_file():
-            return candidate
-    return candidates[0] if candidates else Path("yolov11s-face.pt")
+            return candidate.resolve()
+    return candidates[0].resolve() if candidates else Path("yolov11s-face.pt").resolve()
 
 
 def _load_callable(spec):
