@@ -86,15 +86,20 @@ def _worker(source, case_number, generation):
         face_runtime = FaceRuntime(fr_store=fr_store)
         silhouette = SegmentationSilhouetteExtractor()
 
-        gait_backend = load_callable()
-        if gait_backend is None:
-            checkpoint = Path(os.getenv(
-                "RESIBO_GAIT_CHECKPOINT",
-                "workspace/gait/GaitBase_DA_CCGR_FT-10000.pt",
-            ))
-            if checkpoint.is_file():
-                from Gait.rebigait_adapter import infer_gaitbase
-                gait_backend = infer_gaitbase
+        gait_backend = None
+        gait_error = None
+        try:
+            gait_backend = load_callable()
+            if gait_backend is None:
+                checkpoint = Path(os.getenv(
+                    "RESIBO_GAIT_CHECKPOINT",
+                    "workspace/gait/GaitBase_DA_CCGR_FT-10000.pt",
+                ))
+                if checkpoint.is_file():
+                    from Gait.rebigait_adapter import infer_gaitbase
+                    gait_backend = infer_gaitbase
+        except Exception as exc:
+            gait_error = str(exc)
 
         gait_scorer = load_callable(os.getenv("RESIBO_GAIT_SCORER")) or GaitGalleryScorer()
         gait_base = GaitBaseAdapter(gait_backend)
@@ -116,8 +121,19 @@ def _worker(source, case_number, generation):
 
         live.set_pipeline("obj", "starting")
         live.set_pipeline("face", "ready" if face_runtime.detector_ready else "waiting", face_runtime.error)
-        live.set_pipeline("gait", "ready" if gait_backend and silhouette.ready else "waiting")
-        live.set_pipeline("resibo", "ready" if fr_store and getattr(gait_scorer, "ready", False) else "waiting")
+        if gait_backend and silhouette.ready:
+            live.set_pipeline("gait", "ready")
+        else:
+            live.set_pipeline(
+                "gait",
+                "waiting",
+                gait_error or silhouette.error or "GaitBase backend/silhouette model not configured.",
+            )
+        live.set_pipeline(
+            "resibo",
+            "ready" if getattr(gait_scorer, "ready", False) else "waiting",
+            None if getattr(gait_scorer, "ready", False) else "Gait gallery/scorer not configured.",
+        )
 
         output_dir = Path("workspace") / "obj" / case_number / source.stem
 
@@ -192,6 +208,12 @@ def _worker(source, case_number, generation):
             live.set_pipeline("face", "running" if face_runtime.detector_ready else "waiting")
             if gait_backend and silhouette.ready:
                 live.set_pipeline("gait", "running")
+            elif gait_error or not silhouette.ready:
+                live.set_pipeline(
+                    "gait",
+                    "waiting",
+                    gait_error or silhouette.error or "GaitBase backend/silhouette model not configured.",
+                )
             if fr_store and getattr(gait_scorer, "ready", False):
                 live.set_pipeline("resibo", "running")
 
