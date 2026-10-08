@@ -129,10 +129,14 @@ def _worker(source, case_number, generation):
                 "waiting",
                 gait_error or silhouette.error or "GaitBase backend/silhouette model not configured.",
             )
+        resibo_ready = (
+            getattr(gait_scorer, "ready", False)
+            and (face_runtime.processor is not None or fr_store is not None)
+        )
         live.set_pipeline(
             "resibo",
-            "ready" if getattr(gait_scorer, "ready", False) else "waiting",
-            None if getattr(gait_scorer, "ready", False) else "Gait gallery/scorer not configured.",
+            "ready" if resibo_ready else "waiting",
+            None if resibo_ready else "Requires a face result and a gait gallery/scorer.",
         )
 
         output_dir = Path("workspace") / "obj" / case_number / source.stem
