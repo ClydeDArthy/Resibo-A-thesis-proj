@@ -15,7 +15,9 @@ ultralytics>=8.3
 #    Set RESIBO_PERSON_WEIGHTS to the YOLO11 person checkpoint when needed.
 #
 # 2) Face / OSDFace / AdaFace:
-#    The repository's production face workflow is the existing FR
+#    The supplied face detector checkpoint is `yolov11s-face.pt`; place it
+#    under the project root, models/, or workspace/models/ (the runtime now
+#    auto-discovers it). The repository's production face workflow is the existing FR
 #    OSDFace + AdaFace research/GPU workflow. It is not replaced by a
 #    pip-only reimplementation here. For live execution, configure:
 #      RESIBO_FACE_PROCESSOR=module:function
