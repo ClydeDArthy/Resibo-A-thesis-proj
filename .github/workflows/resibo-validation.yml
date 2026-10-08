@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - resibo-final-dev-v2
+      - tst
   pull_request:
 
 permissions:
